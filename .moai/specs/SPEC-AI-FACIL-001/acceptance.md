@@ -4,7 +4,7 @@
 ```yaml
 ---
 spec_id: SPEC-AI-FACIL-001
-acceptance_version: 1.1.0
+acceptance_version: 2.0.0
 created: 2025-11-15
 updated: 2025-11-15
 status: ready
@@ -17,7 +17,22 @@ coverage_target: 85%
 
 This document defines the detailed acceptance criteria and test scenarios for the AI Facilitator Agent for Google Docs collaboration. All scenarios use **Given-When-Then** format for clarity and testability.
 
+**Version 2.0.0** reflects the **simplified LLM-only approach**, removing all embedding generation, vector database, and cosine similarity requirements.
+
 ## REVISION HISTORY
+
+### Version 2.0.0 (2025-11-15)
+- **REMOVED**: All embedding generation test scenarios (AC-2.1 through AC-2.5)
+- **REMOVED**: All vector database test scenarios (AC-2.3, AC-2.4)
+- **REMOVED**: All cosine similarity and SBERT tests
+- **REMOVED**: ChromaDB/Pinecone infrastructure tests
+- **ADDED**: Mode-specific test scenarios for 4 agent modes (Outlier, Summary, Connect, Question)
+- **ADDED**: Context file import test scenarios
+- **ADDED**: Terminal mode switching tests
+- **ADDED**: LLM performance tests with token management
+- **UPDATED**: Quality gates for LLM-only approach
+- **UPDATED**: Performance benchmarks for LLM response times
+- **UPDATED**: Research validation framework with mode-specific approval rates
 
 ### Version 1.1.0 (2025-11-15)
 - **REMOVED**: Phase 5 dashboard scenarios (AC-5.1 through AC-5.6)
@@ -36,10 +51,16 @@ Before production release, the system MUST meet:
 4. **Security Audit**: Zero critical/high vulnerabilities
 5. **Test Coverage**: ≥85% code coverage for critical paths
 6. **Human Validation**: ≥4/5 facilitator satisfaction rating
-7. **Cost Efficiency**: <$5 per 1000 contributions analyzed
-8. **Research Validation**: Researcher approval rate >60% for AI suggestions
-9. **Terminal UI Usability**: Researcher can complete approval workflow in <30 seconds per suggestion
-10. **Research Data Quality**: 100% of decisions logged with complete metadata
+7. **LLM Analysis Success**: >95% successful LLM responses (no API errors)
+8. **Mode-Specific Approval Rates**:
+   - Outlier mode: >60%
+   - Summary mode: >70%
+   - Connect mode: >50%
+   - Question mode: >65%
+9. **Context Import Success**: 100% success for valid .txt files
+10. **System Uptime**: >99.5%
+11. **API Costs**: <$10 per 1000 contributions
+12. **Research Data Logging**: 100% of decisions captured
 
 ---
 
@@ -178,434 +199,610 @@ pytest tests/test_api_error_handling.py::test_rate_limit_backoff
 
 ---
 
-## Phase 2: Embedding & Vector Database Integration
+## Phase 2: Mode-Specific LLM Analysis
 
-### AC-2.1: SBERT Embedding Generation
+### AC-2.1: Outlier Mode - Unique Contribution Detection
 
-**Given** 10 text segments extracted from document changes
-**When** the embedding service generates vectors using SBERT (`all-mpnet-base-v2`)
-**Then** 10 embeddings are created with dimension 768
-**And** all vectors are normalized to unit length (L2 norm = 1.0)
-**And** embedding generation completes in <5 seconds
-**And** all embeddings are non-zero vectors
+**Given** 10 similar contributions about "accessibility" in document context
+**When** user adds unique idea about "privacy"
+**Then** LLM detects uniqueness (semantic similarity <0.3 threshold)
+**And** LLM suggests encouragement comment: "Great outlier perspective on privacy! This adds a unique angle to our accessibility discussion."
+**And** the suggestion is presented to researcher for approval
+**And** the analysis completes in <15 seconds
 
 **Test Data**:
-- 10 paragraphs (50-200 words each)
-- Expected embedding dimension: 768
-- Expected throughput: >100 segments/minute
+- Document context: 10 accessibility-focused contributions
+- New contribution: "Privacy concerns should be our top priority"
+- LLM prompt: Outlier detection template
+- Expected: Outlier detected, encouragement suggested
 
 **Verification**:
 ```bash
-pytest tests/test_embedding_service.py::test_sbert_generation
+pytest tests/test_llm_analysis.py::test_outlier_mode_unique_detection
 ```
 
 ---
 
-### AC-2.2: Gemini Embedding Generation
+### AC-2.2: Outlier Mode - Similar Contribution (No Alert)
 
-**Given** the system is configured to use Gemini embeddings
-**When** 20 text segments are sent to Gemini `embedding-001` API
-**Then** 20 embeddings are returned with dimension 768
-**And** all vectors are normalized to unit length
-**And** API call completes in <8 seconds (batched)
-**And** the system handles API errors gracefully (retry once)
+**Given** all contributions clustered around 2 themes (accessibility, performance)
+**When** user adds idea within existing accessibility cluster
+**Then** LLM determines similarity >0.3 threshold
+**And** LLM does NOT suggest outlier comment
+**And** the system logs "No outlier detected: contribution aligns with existing themes"
 
 **Test Data**:
-- 20 sentences (20-50 words each)
-- Gemini API key configured
-- Expected dimension: 768
+- Document context: Accessibility and performance themes
+- New contribution: "We should improve screen reader support" (accessibility theme)
+- Expected: No outlier suggestion
 
 **Verification**:
 ```bash
-pytest tests/test_embedding_service.py::test_gemini_generation --gemini-api-key
+pytest tests/test_llm_analysis.py::test_outlier_mode_no_alert
 ```
 
 ---
 
-### AC-2.3: Vector Storage in ChromaDB
+### AC-2.3: Outlier Mode - Response Time Performance
 
-**Given** 100 embeddings are generated with metadata
-**When** the system stores them in ChromaDB
-**Then** all 100 embeddings are persisted with metadata:
-  - `text`: Original text segment
-  - `author`: User email or ID
-  - `timestamp`: ISO 8601 timestamp
-  - `document_id`: Google Doc ID
-  - `position`: Character offset in document
-**And** embeddings are retrievable by document_id filter
-**And** storage operation completes in <3 seconds
+**Given** researcher selects outlier mode
+**When** LLM analyzes contribution with document context (approx 50 contributions, 10K tokens)
+**Then** response time <15 seconds
+**And** LLM returns structured JSON: `{should_comment: boolean, comment_text: string, confidence: float}`
+**And** the response is valid and parseable
 
 **Test Data**:
-- 100 embeddings with varying authors and timestamps
-- Document ID: `doc_12345`
+- Document with 50 contributions (approx 10K tokens)
+- LLM prompt: Outlier detection template
+- Expected: <15s response time
 
 **Verification**:
 ```bash
-pytest tests/test_vector_db.py::test_chromadb_storage
+pytest tests/test_llm_analysis.py::test_outlier_mode_performance --benchmark
 ```
 
 ---
 
-### AC-2.4: Similarity Search Performance
+### AC-2.4: Outlier Mode - Researcher Approval Prompt
 
-**Given** ChromaDB contains 10,000 stored embeddings
-**When** the system performs cosine similarity search with a query vector
-**Then** the top 20 most similar embeddings are returned
-**And** the search completes in <2 seconds
-**And** all results have cosine similarity scores between -1.0 and 1.0
-**And** results are sorted by similarity (descending)
+**Given** outlier detected by LLM
+**When** researcher reviews suggestion in terminal
+**Then** terminal displays approval prompt: "Post this comment? (y/n/e/c)"
+**And** prompt shows: suggested comment text, confidence score, original contribution excerpt
+**And** researcher can choose: approve (y), reject (n), edit (e), or customize prompt (c)
 
 **Test Data**:
-- 10,000 pre-stored embeddings
-- Query vector: New text segment embedding
-- Expected top-k: 20
+- Outlier suggestion with confidence 0.85
+- Terminal UI active
 
 **Verification**:
 ```bash
-pytest tests/test_vector_db.py::test_similarity_search_performance --benchmark
+pytest tests/test_terminal_ui.py::test_outlier_approval_prompt
 ```
 
 ---
 
-### AC-2.5: Embedding API Failure Handling
+### AC-3.1: Summary Mode - Cluster Summary Generation
 
-**Given** the SBERT or Gemini API fails for 3 consecutive text segments
-**When** the embedding service attempts to generate vectors
-**Then** the system logs the failures with text samples
-**And** the system continues processing remaining segments
-**And** the system alerts if >20% of segments fail in a batch
-**And** failed segments are queued for retry with exponential backoff
+**Given** 15 contributions across 3 themes (UX, performance, security)
+**When** researcher triggers summary mode
+**Then** LLM generates cluster summary with group labels:
+  - "Group 1 (5 people): User experience improvements - focus on accessibility and mobile design"
+  - "Group 2 (6 people): Performance optimization - emphasizing load times and caching"
+  - "Group 3 (4 people): Security enhancements - authentication and data protection"
+**And** summary is formatted for posting to document
+**And** the analysis completes in <20 seconds
 
 **Test Data**:
-- Mock embedding API returning errors
-- Batch of 10 segments, 3 failures
+- 15 contributions with known themes
+- LLM prompt: Summary/clustering template
+- Expected: 3 groups identified with accurate labels
 
 **Verification**:
 ```bash
-pytest tests/test_embedding_service.py::test_failure_handling
+pytest tests/test_llm_analysis.py::test_summary_mode_clustering
 ```
 
 ---
 
-## Phase 3: Analysis Engine (Outlier Detection & Related Ideas)
+### AC-3.2: Summary Mode - Formatted Output for Document
 
-### AC-3.1: Outlier Detection with Low Similarity
+**Given** cluster summary generated by LLM
+**When** posted to document
+**Then** format is:
+  ```
+  [AI Facilitator Summary]
 
-**Given** 20 text segments are stored in vector database with high similarity (>0.8)
-**When** a new text segment is added with average similarity 0.4 to all others
-**Then** the system identifies it as an outlier
-**And** the novelty score is calculated: `(1 - 0.4) * length_weight`
-**And** the outlier is ranked as #1 in the batch
-**And** the outlier is logged with text, author, and similarity scores
+  Group 1 (5 people): [theme description]
+  Group 2 (6 people): [theme description]
+  Group 3 (4 people): [theme description]
+
+  Generated: 2025-11-15 14:30:00
+  ```
+**And** format includes participant count per group
+**And** summary is posted at designated location (end of document or researcher-specified position)
 
 **Test Data**:
-- 20 similar embeddings (cosine similarity >0.8)
-- 1 outlier embedding (average similarity 0.4)
-- Outlier threshold: 0.6
+- LLM-generated summary
+- Document posting location
 
 **Verification**:
 ```bash
-pytest tests/test_analysis_engine.py::test_outlier_detection_low_similarity
+pytest tests/test_comment_posting.py::test_summary_mode_format
 ```
 
 ---
 
-### AC-3.2: No Outliers Detected (All Similar)
+### AC-3.3: Summary Mode - Minimum Cluster Detection
 
-**Given** 30 text segments with average pairwise similarity >0.75
-**When** the analysis engine processes the batch
-**Then** zero outliers are detected
-**And** no outlier alerts are generated
-**And** the system logs "No outliers found in batch"
+**Given** 5 contributions to document
+**When** summary mode analyzes content
+**Then** LLM identifies at least 2 distinct clusters (if content is diverse)
+**Or** reports "Insufficient diversity for clustering" if all contributions highly similar
+**And** minimum cluster size is 2 contributions per cluster
 
 **Test Data**:
-- 30 similar embeddings (all discussing the same topic)
-- Average similarity >0.75
+- 5 diverse contributions (2-3 expected clusters)
+- 5 identical contributions (expect "no clustering" result)
 
 **Verification**:
 ```bash
-pytest tests/test_analysis_engine.py::test_no_outliers_high_similarity
+pytest tests/test_llm_analysis.py::test_summary_mode_minimum_clusters
 ```
 
 ---
 
-### AC-3.3: Top 3 Outliers Ranked by Novelty
+### AC-3.4: Summary Mode - Dynamic Re-clustering
 
-**Given** a batch contains 5 outliers with varying novelty scores:
-  - Outlier A: novelty 0.9 (very unique, long text)
-  - Outlier B: novelty 0.7 (moderately unique, medium text)
-  - Outlier C: novelty 0.65 (slightly unique, short text)
-  - Outlier D: novelty 0.6 (barely unique, long text)
-  - Outlier E: novelty 0.55 (low uniqueness)
-**When** the system ranks outliers
-**Then** only the top 3 are selected: A, B, D
-**And** they are ordered by novelty score (descending)
-**And** outliers C and E are logged but not processed further
+**Given** summary mode active and initial summary posted
+**When** new contribution arrives
+**Then** LLM re-clusters contributions including new content
+**And** summary is updated if cluster composition changes significantly (>20% change)
+**And** updated summary includes timestamp and "Updated" label
+**And** researcher approves update before posting
 
 **Test Data**:
-- 5 outliers with known novelty scores
-- Max outliers per batch: 3
+- Initial summary with 3 clusters
+- New contribution that shifts clustering
+- Expected: Updated summary generated
 
 **Verification**:
 ```bash
-pytest tests/test_analysis_engine.py::test_top3_outliers_ranking
+pytest tests/test_llm_analysis.py::test_summary_mode_dynamic_update
 ```
 
 ---
 
-### AC-3.4: Related Idea Connection (Same Authors Excluded)
+### AC-4.1: Connect Mode - Similar Idea Connection
 
-**Given** 10 text segments from 5 different authors
-**When** two segments from Author A have similarity 0.82
-**And** two segments from Authors B and C have similarity 0.78
-**Then** only the B-C pair is identified as a "related idea" connection
-**And** the A-A pair is excluded (same author)
-**And** the related pair is logged with both authors and similarity score
+**Given** user A's idea similar to user B's previous comment (semantic similarity >0.7)
+**When** connect mode analyzes contribution
+**Then** LLM suggests connection: "@UserA, this connects well with @UserB's earlier point about [topic]. Consider collaborating on this idea."
+**And** comment tags both users correctly
+**And** comment references specific previous contribution
 
 **Test Data**:
-- 10 embeddings from 5 authors
-- 2 high-similarity pairs (1 same author, 1 different authors)
-- Related similarity threshold: 0.75
+- User A contribution: "We should prioritize mobile-first design"
+- User B previous comment: "Mobile experience is critical for our users"
+- Expected: Connection suggestion linking both
 
 **Verification**:
 ```bash
-pytest tests/test_analysis_engine.py::test_related_ideas_different_authors
+pytest tests/test_llm_analysis.py::test_connect_mode_similar_ideas
 ```
 
 ---
 
-### AC-3.5: Convergent Theme Detection (≥3 Authors)
+### AC-4.2: Connect Mode - Most Relevant Match Selection
 
-**Given** 15 text segments discussing "sustainability" from 4 authors
-**When** hierarchical clustering groups them into a cluster with similarity >0.7
-**And** the cluster contains segments from Authors A, B, C, D
-**Then** the system identifies this as a "convergent theme"
-**And** the theme is logged with author list and representative text samples
-**And** the system prioritizes this for LLM review
+**Given** multiple similar contributors (3+ users with related ideas)
+**When** connect mode runs
+**Then** LLM selects most relevant match based on:
+  - Semantic similarity (highest)
+  - Recency (preferring recent contributions)
+  - Author diversity (avoiding same author connections)
+**And** only ONE connection is suggested (not all possible matches)
 
 **Test Data**:
-- 15 embeddings about sustainability
-- 4 different authors
-- Clustering threshold: 0.7
+- New contribution with 3 similar previous contributions
+- Expected: Single most relevant match selected
 
 **Verification**:
 ```bash
-pytest tests/test_analysis_engine.py::test_convergent_theme_detection
+pytest tests/test_llm_analysis.py::test_connect_mode_best_match
 ```
 
 ---
 
-### AC-3.6: Moving Window Eviction (Last 100 Contributions)
+### AC-4.3: Connect Mode - No Connection for Unique Ideas
 
-**Given** the vector database contains 100 contributions for a document
-**When** 10 new contributions are added
-**Then** the 10 oldest contributions are evicted from the active window
-**And** the active window maintains exactly 100 contributions
-**And** evicted embeddings are archived for long-term analytics
-**And** similarity search only uses active window embeddings
+**Given** contribution with no similar ideas in document context
+**When** connect mode analyzes contribution
+**Then** LLM determines no relevant connections exist
+**And** LLM does NOT suggest connection comment
+**And** system logs "No connections found for contribution"
 
 **Test Data**:
-- 100 pre-stored embeddings with timestamps
-- 10 new embeddings
-- Window size: 100
+- Unique contribution with no semantic matches
+- Expected: No connection suggestion
 
 **Verification**:
 ```bash
-pytest tests/test_analysis_engine.py::test_moving_window_eviction
+pytest tests/test_llm_analysis.py::test_connect_mode_no_match
 ```
 
 ---
 
-### AC-3.7: Duplicate Outlier Suppression
+### AC-4.4: Connect Mode - Researcher Approval with User Tagging
 
-**Given** Outlier X was detected in batch N
-**When** the same text (or 95% similar) is detected as outlier in batch N+1
-**Then** the system suppresses the duplicate alert
-**And** the recurrence counter for Outlier X is incremented
-**And** the system logs "Duplicate outlier suppressed: X (recurrence: 2)"
-**And** no LLM decision is triggered for the duplicate
+**Given** connection suggested by LLM
+**When** researcher approves suggestion
+**Then** comment is posted with correct user tags (@UserA, @UserB)
+**And** Google Docs mentions both users (if API supports)
+**And** comment references specific contribution locations (if available)
 
 **Test Data**:
-- Same outlier text in 2 consecutive batches
-- Similarity threshold for duplicate: 0.95
+- Connection suggestion with 2 users
+- Google Docs API for user mentions
 
 **Verification**:
 ```bash
-pytest tests/test_analysis_engine.py::test_duplicate_outlier_suppression
+pytest tests/integration/test_connect_mode_posting.py --live-doc
 ```
 
 ---
 
-## Phase 4: LLM Decision Service & Comment Posting
+### AC-5.1: Question Mode - Clarifying Question Generation
 
-### AC-4.1: LLM Decision Approval (High Confidence)
-
-**Given** an outlier is detected with novelty score 0.85
-**When** the LLM decision service constructs a prompt including:
-  - Original outlier text
-  - Similarity scores
-  - Author metadata
-  - Document context (previous 500 words)
-**And** sends it to Gemini `gemini-1.5-pro`
-**Then** the LLM returns structured JSON: `{should_comment: true, comment_text: "...", confidence: 0.9}`
-**And** the decision latency is <10 seconds
-**And** the comment is approved for posting
+**Given** contribution with clear assertion: "We should implement feature X"
+**When** question mode analyzes contribution
+**Then** LLM generates clarifying question: "What specific outcomes do you expect from feature X? How would it address current user pain points?"
+**And** question is relevant and non-generic
+**And** question encourages deeper thinking
 
 **Test Data**:
-- Outlier text: "What if we use blockchain for decentralized governance?"
-- Document context: Discussion about team decision-making
-- Expected LLM response: Approve with relevant comment
+- Assertion-based contribution
+- Expected: Clarifying question generated
 
 **Verification**:
 ```bash
-pytest tests/test_llm_service.py::test_llm_approval_high_confidence --gemini-api-key
+pytest tests/test_llm_analysis.py::test_question_mode_clarifying
 ```
 
 ---
 
-### AC-4.2: LLM Decision Rejection (Low Confidence)
+### AC-5.2: Question Mode - Deepening Question (Socratic Method)
 
-**Given** a marginal outlier is detected with novelty score 0.62
-**When** the LLM evaluates the outlier
-**Then** the LLM returns `{should_comment: false, comment_text: "", confidence: 0.5}`
-**And** the system does NOT post a comment
-**And** the decision is logged for human review
-**And** the LLM rationale is stored for analysis
+**Given** shallow contribution: "I think this is good"
+**When** question mode runs
+**Then** LLM asks deepening question using Socratic method: "What specific aspects do you find valuable? Can you elaborate on why this approach would work?"
+**And** question prompts reflection and elaboration
+**And** question is open-ended (not yes/no)
 
 **Test Data**:
-- Marginal outlier text: "I agree with the previous point."
-- Expected LLM response: Reject (low value, redundant)
+- Shallow contribution
+- Expected: Deepening question generated
 
 **Verification**:
 ```bash
-pytest tests/test_llm_service.py::test_llm_rejection_low_confidence
+pytest tests/test_llm_analysis.py::test_question_mode_deepening
 ```
 
 ---
 
-### AC-4.3: LLM Timeout Fallback to Rule-Based
+### AC-5.3: Question Mode - Domain-Relevant Questions
 
-**Given** the LLM API call times out after 10 seconds
-**When** the system detects the timeout
-**Then** the system falls back to rule-based commenting
-**And** uses conservative thresholds: novelty >0.8, similarity >0.85
-**And** if thresholds are met, posts a generic comment: "[AI Facilitator] Unique idea detected: {outlier_text}"
-**And** the system alerts the human facilitator about fallback mode
-**And** the fallback decision is logged
+**Given** technical contribution about "microservices architecture"
+**When** question mode analyzes contribution
+**Then** question is relevant to domain: "How would you handle inter-service communication and data consistency in this microservices approach?"
+**And** question demonstrates understanding of technical context
+**And** question is NOT generic ("Can you explain more?")
 
 **Test Data**:
-- Mock LLM API with 15-second delay (timeout: 10s)
-- High-novelty outlier (>0.8)
+- Technical contribution with domain-specific language
+- Expected: Domain-relevant question
 
 **Verification**:
 ```bash
-pytest tests/test_llm_service.py::test_llm_timeout_fallback
+pytest tests/test_llm_analysis.py::test_question_mode_domain_relevance
 ```
 
 ---
 
-### AC-4.4: Comment Posting to Google Docs
+### AC-5.4: Question Mode - Researcher Edit Capability
 
-**Given** an LLM approves a comment with text: "Great outlier idea! Consider connecting this with earlier discussion on X."
-**When** the comment posting service calls Docs API `documents.batchUpdate` with `createComment`
-**Then** the comment is posted at the correct text position (character offset)
-**And** the comment is formatted: `[AI Facilitator] Great outlier idea! Consider connecting this with earlier discussion on X.`
-**And** the comment includes metadata in reply: `Confidence: 0.9 | Analysis: Outlier | Timestamp: 2025-11-15T10:30:00Z`
-**And** the API call succeeds with 200 OK response
+**Given** question generated by LLM
+**When** researcher reviews suggestion and selects edit (e)
+**Then** inline editor displays question text
+**And** researcher edits to: "Great point! Could you also address [specific aspect]?"
+**And** edited version preserves intent (encourages elaboration)
+**And** edited question is posted after approval
 
 **Test Data**:
-- Document ID: `doc_12345`
-- Text position: Character offset 500
-- Comment text from LLM
+- Original LLM question
+- Researcher-edited version
+- Expected: Edited question posted
 
 **Verification**:
 ```bash
-pytest tests/integration/test_comment_posting.py::test_post_comment_success --live-doc
+pytest tests/test_terminal_ui.py::test_question_mode_edit
 ```
 
 ---
 
-### AC-4.5: Comment Posting Rate Limiting
+## Phase 2 (Context Management): Context File Import
 
-**Given** the system posted a comment to document X at timestamp T
-**When** a new comment is approved for the same document at T+30 seconds
-**Then** the system queues the comment instead of posting immediately
-**And** the comment is posted at T+60 seconds (minimum 60-second interval)
-**And** the system logs "Comment queued due to rate limit"
+### AC-6.1: Context File Import - Valid UTF-8 Text
+
+**Given** researcher runs terminal command: `import context.txt`
+**When** file is valid UTF-8 text (10KB)
+**Then** file content is added to LLM context for future analyses
+**And** terminal displays: "✓ Imported context.txt (10KB, 2,500 tokens)"
+**And** file metadata stored: filename, size, token count, import timestamp
 
 **Test Data**:
-- Document ID: `doc_12345`
-- 2 comments approved 30 seconds apart
-- Rate limit: 1 comment per 60 seconds
+- Valid UTF-8 text file (10KB)
+- Expected: Successful import with token count
 
 **Verification**:
 ```bash
-pytest tests/test_comment_posting.py::test_rate_limit_queuing
+pytest tests/test_context_import.py::test_import_valid_utf8
 ```
 
 ---
 
-### AC-4.6: Comment Posting Paused (≥5 Unresolved Comments)
+### AC-6.2: Context File Import - LLM Context Integration
 
-**Given** document X has 5 unresolved AI-generated comments
-**When** a new comment is approved by LLM
-**Then** the system does NOT post the comment
-**And** the comment is queued with "Paused: too many unresolved comments" status
-**And** when unresolved count drops to 3, the system resumes posting from queue
-**And** the system logs "Comment posting paused for document X"
+**Given** context file imported with domain knowledge (e.g., "Focus on accessibility compliance")
+**When** LLM analyzes new contribution
+**Then** LLM response incorporates context knowledge
+**And** LLM suggestions reference context information when relevant
+**And** context influence is visible in suggestion quality
 
 **Test Data**:
-- Document with 5 unresolved comments
-- 1 new approved comment
+- Context file: Accessibility compliance guidelines
+- New contribution: UI design idea
+- Expected: LLM suggestion mentions accessibility considerations
 
 **Verification**:
 ```bash
-pytest tests/test_comment_posting.py::test_pause_at_max_unresolved
+pytest tests/test_context_import.py::test_llm_context_integration
 ```
 
 ---
 
-### AC-4.7: Duplicate Comment Prevention
+### AC-6.3: Context File Import - Token Limit Management
 
-**Given** a comment was posted at text position 500 with content "Unique idea about blockchain governance"
-**When** a similar outlier is detected at position 500 again
-**Then** the system checks for existing comments at that position
-**And** finds the existing comment (exact position match OR 95% text similarity)
-**And** the system suppresses the duplicate comment
-**And** logs "Duplicate comment suppressed at position 500"
+**Given** multiple files imported with total size approaching token limit (100K tokens)
+**When** total imported context exceeds 100K tokens
+**Then** system warns: "⚠️ Context approaching token limit (95K/100K). Consider removing older files."
+**And** if limit exceeded, system truncates oldest imported files
+**And** truncation logged with removed file names
 
 **Test Data**:
-- Existing comment at position 500
-- New comment at same position with 96% similar text
+- 5 imported files totaling 120K tokens
+- Expected: Oldest files truncated to fit within limit
 
 **Verification**:
 ```bash
-pytest tests/test_comment_posting.py::test_duplicate_comment_suppression
+pytest tests/test_context_import.py::test_token_limit_truncation
 ```
 
 ---
 
-### AC-4.8: Comment Posting Retry on API Failure
+### AC-6.4: Context File Import - List Imported Files
 
-**Given** the Docs API `batchUpdate` call fails with 503 (service unavailable)
-**When** the comment posting service detects the failure
-**Then** the system waits 5 seconds and retries once
-**And** if the retry succeeds, the comment is posted successfully
-**And** if the retry fails, the comment is logged to retry queue for manual review
-**And** the system alerts the human facilitator
+**Given** researcher runs: `list context`
+**When** 3 files exist in context storage
+**Then** terminal displays:
+  ```
+  Imported Context Files:
+  1. guidelines.txt (15KB, 3,800 tokens) - Imported: 2025-11-15 10:30
+  2. standards.txt (8KB, 2,100 tokens) - Imported: 2025-11-15 11:45
+  3. references.txt (12KB, 3,200 tokens) - Imported: 2025-11-15 13:20
+
+  Total: 35KB, 9,100 tokens
+  ```
+**And** files listed in import order (oldest first)
 
 **Test Data**:
-- Mock Docs API returning 503 on first call, 200 on second
-- Comment text and position
+- 3 imported files with known metadata
+- Expected: Formatted list with sizes and timestamps
 
 **Verification**:
 ```bash
-pytest tests/test_comment_posting.py::test_retry_on_api_failure
+pytest tests/test_context_import.py::test_list_context_files
 ```
 
 ---
 
-## Phase 4 (Terminal Interface): Additional Scenarios
+### AC-6.5: Context File Import - Remove Imported File
+
+**Given** researcher runs: `remove context.txt`
+**When** file exists in context storage
+**Then** system removes file from LLM context
+**And** terminal displays: "✓ Removed context.txt from context"
+**And** file no longer appears in `list context` output
+**And** LLM analyses no longer use removed file content
+
+**Test Data**:
+- Previously imported context.txt
+- Expected: Successful removal
+
+**Verification**:
+```bash
+pytest tests/test_context_import.py::test_remove_context_file
+```
+
+---
+
+## Phase 2 (Mode Management): Terminal Mode Switching
+
+### AC-7.1: Mode Switching - Display Current Mode
+
+**Given** researcher runs: `mode outlier`
+**When** mode changes successfully
+**Then** terminal displays: "[MODE: Outlier Detection]"
+**And** mode indicator persists in terminal header
+**And** next analysis uses outlier prompt template
+
+**Test Data**:
+- Initial mode: None
+- Command: `mode outlier`
+- Expected: Mode switched to Outlier
+
+**Verification**:
+```bash
+pytest tests/test_mode_switching.py::test_display_current_mode
+```
+
+---
+
+### AC-7.2: Mode Switching - Change Analysis Template
+
+**Given** outlier mode active
+**When** researcher switches to: `mode summary`
+**Then** next analysis uses summary prompt template
+**And** LLM receives summary-specific instructions
+**And** terminal displays: "[MODE: Summary/Clustering]"
+**And** mode change logged with timestamp
+
+**Test Data**:
+- Current mode: Outlier
+- Switch to: Summary
+- Expected: Prompt template changed
+
+**Verification**:
+```bash
+pytest tests/test_mode_switching.py::test_mode_template_switch
+```
+
+---
+
+### AC-7.3: Mode Switching - Invalid Mode Error
+
+**Given** researcher types: `mode invalid`
+**When** system processes command
+**Then** terminal displays error: "❌ Invalid mode. Valid modes: outlier, summary, connect, question"
+**And** current mode remains unchanged
+**And** error logged for debugging
+
+**Test Data**:
+- Invalid mode name: "invalid"
+- Expected: Error message with valid options
+
+**Verification**:
+```bash
+pytest tests/test_mode_switching.py::test_invalid_mode_error
+```
+
+---
+
+### AC-7.4: Mode Switching - Batch Processing Mode Persistence
+
+**Given** researcher selects: `mode summary`
+**When** batch processing runs and analyzes 5 contributions
+**Then** all 5 analyses use summary mode template
+**And** mode persists across batch processing cycles
+**And** mode does NOT reset between contributions
+
+**Test Data**:
+- Mode: Summary
+- Batch: 5 contributions
+- Expected: All analyses use summary template
+
+**Verification**:
+```bash
+pytest tests/test_mode_switching.py::test_batch_mode_persistence
+```
+
+---
+
+## Phase 3: LLM Performance & Token Management
+
+### AC-8.1: LLM Performance - 50 Contributions (10K Tokens)
+
+**Given** document with 50 contributions (approx 10K tokens)
+**When** LLM analyzes new contribution in outlier mode
+**Then** response time <15 seconds
+**And** LLM successfully processes entire context
+**And** no token truncation occurs
+
+**Test Data**:
+- Document: 50 contributions, 10K tokens
+- Mode: Outlier detection
+- Expected: <15s response time
+
+**Verification**:
+```bash
+pytest tests/test_llm_performance.py::test_50_contributions_performance --benchmark
+```
+
+---
+
+### AC-8.2: LLM Performance - 200 Contributions (40K Tokens)
+
+**Given** document with 200 contributions (approx 40K tokens)
+**When** LLM analyzes new contribution
+**Then** response time <30 seconds
+**And** LLM successfully processes context (within API token limits)
+**And** analysis quality remains high
+
+**Test Data**:
+- Document: 200 contributions, 40K tokens
+- Mode: Any
+- Expected: <30s response time
+
+**Verification**:
+```bash
+pytest tests/test_llm_performance.py::test_200_contributions_performance --benchmark
+```
+
+---
+
+### AC-8.3: LLM Performance - Token Limit Truncation
+
+**Given** LLM context approaching token limit (120K tokens from document + imports)
+**When** new contribution arrives
+**Then** system truncates oldest document content to fit within limit
+**And** system preserves: recent contributions (last 100), imported context files, current contribution
+**And** truncation logged: "⚠️ Context truncated: removed 50 oldest contributions to fit token limit"
+**And** analysis proceeds with truncated context
+
+**Test Data**:
+- Large document: 120K tokens
+- Expected: Truncation to fit API limit
+
+**Verification**:
+```bash
+pytest tests/test_llm_performance.py::test_token_limit_truncation
+```
+
+---
+
+### AC-8.4: LLM Performance - API Rate Limit Retry
+
+**Given** LLM API rate limit hit (429 error)
+**When** analysis requested
+**Then** system retries with exponential backoff:
+  - Wait 2 seconds, retry #1
+  - If fails, wait 4 seconds, retry #2
+  - If fails, wait 8 seconds, retry #3
+**And** if all retries fail, system logs error and alerts researcher
+**And** batch processing continues with remaining contributions
+
+**Test Data**:
+- Mock LLM API returning 429 errors
+- Expected: Retry pattern with backoff
+
+**Verification**:
+```bash
+pytest tests/test_llm_performance.py::test_rate_limit_retry
+```
+
+---
+
+## Phase 4: Terminal Interface & Researcher Workflow
 
 ### AC-4.9: Terminal UI Display Document Changes
 
@@ -637,14 +834,13 @@ pytest tests/test_terminal_ui.py::test_display_document_changes
   ```
   ╔════ OUTLIER DETECTED ════╗
   │ Type: Outlier Idea       │
-  │ Novelty: 0.82           │
-  │ Similarity: 0.35 (avg)  │
-  │ Author: user_b@example  │
+  │ Confidence: 0.82         │
+  │ Author: user_b@example   │
   │ Text: "What if we use..." │
   ╚══════════════════════════╝
   ```
 **And** the display uses color coding (yellow for outlier)
-**And** similarity scores show comparison to last 100 contributions
+**And** LLM-suggested comment displayed below analysis
 
 **Test Data**:
 - Outlier detection result with known metrics
@@ -778,7 +974,7 @@ pytest tests/test_terminal_ui.py::test_prompt_customization
 
 ## Phase 5: Production Hardening & Research Data Collection
 
-### AC-6.1: System Uptime SLA (99.5%)
+### AC-9.1: System Uptime SLA (99.5%)
 
 **Given** the system is deployed in production
 **When** measured over a 30-day period
@@ -798,18 +994,19 @@ pytest tests/test_terminal_ui.py::test_prompt_customization
 
 ---
 
-### AC-6.2: Monitoring Metrics Export
+### AC-9.2: Monitoring Metrics Export
 
 **Given** the system is running with Prometheus client enabled
 **When** Prometheus scrapes the `/metrics` endpoint
 **Then** the following metrics are exported:
   - `batch_processing_latency_seconds` (histogram)
-  - `embedding_api_latency_seconds` (histogram)
+  - `llm_api_latency_seconds` (histogram)
   - `llm_decision_latency_seconds` (histogram)
   - `comment_posting_success_rate` (gauge)
-  - `vector_db_query_latency_seconds` (histogram)
   - `api_error_rate` (counter)
-**And** all metrics have correct labels (document_id, service_name, etc.)
+  - `mode_usage_count` (counter with mode label)
+  - `researcher_approval_rate` (gauge per mode)
+**And** all metrics have correct labels (document_id, service_name, mode, etc.)
 **And** metrics scrape completes in <1 second
 
 **Test Data**:
@@ -823,7 +1020,7 @@ pytest tests/test_monitoring.py::test_prometheus_metrics_export
 
 ---
 
-### AC-6.3: Alert Triggering on API Error Rate
+### AC-9.3: Alert Triggering on API Error Rate
 
 **Given** the Prometheus alerting rule is configured:
   ```yaml
@@ -852,7 +1049,7 @@ pytest tests/integration/test_alerting.py::test_high_api_error_rate_alert
 
 ---
 
-### AC-6.4: Graceful Shutdown Handling
+### AC-9.4: Graceful Shutdown Handling
 
 **Given** the system is processing a batch with 5 pending comments in queue
 **When** a SIGTERM signal is sent (graceful shutdown request)
@@ -872,16 +1069,16 @@ pytest tests/test_graceful_shutdown.py::test_shutdown_with_pending_comments
 
 ---
 
-### AC-6.5: Test Coverage ≥85%
+### AC-9.5: Test Coverage ≥85%
 
 **Given** the entire codebase is analyzed for test coverage
 **When** pytest with coverage plugin runs all test suites
 **Then** the overall code coverage is ≥85%
 **And** critical modules have ≥90% coverage:
-  - `embedding_service.py`
-  - `analysis_engine.py`
   - `llm_decision_service.py`
   - `comment_posting_service.py`
+  - `context_manager.py`
+  - `mode_manager.py`
 **And** the coverage report is generated in HTML format
 **And** uncovered lines are logged for manual review
 
@@ -896,7 +1093,7 @@ pytest --cov=src --cov-report=html --cov-report=term
 
 ---
 
-### AC-6.6: Security Audit (Zero Critical Vulnerabilities)
+### AC-9.6: Security Audit (Zero Critical Vulnerabilities)
 
 **Given** the codebase is scanned with security tools (Bandit, Safety, Trivy)
 **When** the scan completes
@@ -919,20 +1116,22 @@ pytest tests/security/test_token_encryption.py
 
 ---
 
-### AC-6.7: End-to-End Workflow Test
+### AC-9.7: End-to-End Workflow Test
 
 **Given** a Google Doc with no existing monitoring
 **When** the following workflow is executed:
   1. Facilitator authenticates via OAuth
   2. Registers document for monitoring
-  3. User A adds text: "We should focus on user experience first."
-  4. User B adds text: "What if we use quantum computing for optimization?" (outlier)
-  5. System processes batch after 100 seconds
-  6. LLM approves comment for User B's outlier
-  7. Comment is posted to Google Doc
+  3. Sets mode to "outlier"
+  4. User A adds text: "We should focus on user experience first."
+  5. User B adds text: "What if we use quantum computing for optimization?" (outlier)
+  6. System processes batch after 100 seconds
+  7. LLM analyzes in outlier mode and approves comment for User B
+  8. Researcher approves suggestion (y)
+  9. Comment is posted to Google Doc
 **Then** all steps complete successfully
 **And** the comment appears in Google Doc within 3 minutes of User B's contribution
-**And** the dashboard shows real-time updates at each step
+**And** the terminal shows real-time updates at each step
 **And** no errors are logged during the workflow
 
 **Test Data**:
@@ -958,71 +1157,38 @@ For each acceptance criterion, the following must be completed:
 5. ✅ **Security**: No new vulnerabilities introduced (scanned and verified)
 6. ✅ **Integration**: Works correctly with dependent components
 7. ✅ **User Validation**: Human facilitator testing completed with positive feedback
+8. ✅ **Mode Implementation**: All 4 agent modes implemented with distinct prompt templates
+9. ✅ **Context Import**: Context file import working for .txt files
+10. ✅ **Mode Switching**: Mode switching functional via terminal commands
+11. ✅ **Mode Approval Rates**: Mode-specific approval rates meet targets
+12. ✅ **Token Management**: LLM token management prevents context overflow
+13. ✅ **Research Data Capture**: Research data captures mode selection and approval patterns
 
 ---
 
-## Human Validation Criteria
-
-### Outlier Detection Accuracy
-
-**Sample Size**: 100 outliers detected by system
-**Human Evaluation**: 3 independent facilitators rate each outlier on relevance (1-5 scale)
-**Acceptance**: ≥85% of outliers rated ≥4/5 (relevant and valuable)
-
-**Test Data**:
-- 100 diverse outliers from different document types
-- 3 human evaluators (experienced facilitators)
-
----
-
-### LLM Comment Relevance
-
-**Sample Size**: 50 LLM-generated comments posted to documents
-**Human Evaluation**: Facilitators rate each comment on relevance and helpfulness (1-5 scale)
-**Acceptance**: ≥80% of comments rated ≥4/5 (relevant and helpful)
-
-**Test Data**:
-- 50 comments across different scenarios (outliers, related ideas, convergent themes)
-- Diverse document topics
-
----
-
-### Researcher Satisfaction Survey
-
-**Sample Size**: 5-10 researchers using the system for 3+ collaboration sessions
-**Survey Questions**:
-1. Overall satisfaction with AI Facilitator Agent (1-5)
-2. Relevance of AI-generated comment suggestions (1-5)
-3. Usefulness of terminal interface for approval workflow (1-5)
-4. Helpfulness of on-demand analysis commands (1-5)
-5. Reduction in manual facilitation effort (percentage estimate)
-6. Would you recommend this tool to other researchers? (Yes/No)
-
-**Acceptance**:
-- Average satisfaction ≥4/5 across all questions
-- ≥80% would recommend the tool
-- Estimated manual effort reduction ≥40%
-
----
-
-## Research Validation Criteria (Wizard-of-Oz Hypothesis Testing)
+## Research Validation Framework
 
 ### Primary Research Question
 
-**Does semantic analysis + LLM-powered intervention improve collaborative document quality?**
+**Does LLM-powered semantic analysis + mode-specific intervention improve collaborative document quality?**
 
 ### Validation Metrics
 
-**1. Researcher Approval Rate**
-- **Target**: >60% of AI suggestions approved (y) or edited (e) before posting
-- **Measurement**: Total approved + edited / Total suggestions generated
-- **Sample Size**: Minimum 100 AI suggestions across 5+ collaboration sessions
-- **Success Criterion**: Approval rate ≥60% indicates AI suggestions are valuable
+**1. Mode-Specific Approval Rates**
+
+| Mode | Target Approval Rate | Measurement | Success Criterion |
+|------|---------------------|-------------|------------------|
+| **Outlier** | >60% | (approved + edited) / total suggestions | ≥60% indicates valuable unique idea detection |
+| **Summary** | >70% | (approved + edited) / total suggestions | ≥70% indicates helpful clustering |
+| **Connect** | >50% | (approved + edited) / total suggestions | ≥50% indicates useful idea connections |
+| **Question** | >65% | (approved + edited) / total suggestions | ≥65% indicates effective Socratic questioning |
+
+**Sample Size**: Minimum 50 suggestions per mode across 5+ collaboration sessions
 
 **2. False Positive Rate**
 - **Target**: <40% of AI suggestions rejected (n) by researcher
 - **Measurement**: Total rejected / Total suggestions generated
-- **Sample Size**: Same as approval rate (100+ suggestions)
+- **Sample Size**: 200+ total suggestions across all modes
 - **Success Criterion**: False positive rate ≤40% indicates acceptable precision
 
 **3. Qualitative Feedback from Participants**
@@ -1042,15 +1208,15 @@ For each acceptance criterion, the following must be completed:
   - 10-30% edits: Healthy balance (researcher adds value)
   - >30% edits: AI suggestions may be too generic or off-target
 
-**5. Custom Prompt Usage**
-- **Measurement**: Frequency of "c" (customize prompt) option usage
-- **Target**: 5-15% of suggestions trigger custom prompts
-- **Interpretation**: Indicates researchers experiment with analysis strategies
+**5. Mode Usage Patterns**
+- **Measurement**: Frequency of each mode selection by researchers
+- **Target**: Balanced usage across modes (no single mode dominates >60%)
+- **Interpretation**: Indicates all modes provide value in different contexts
 
-**6. On-Demand Analysis Effectiveness**
-- **Measurement**: Approval rate for on-demand analysis ("analyze from [perspective]")
-- **Target**: ≥50% approval rate for on-demand suggestions
-- **Interpretation**: Tests if custom perspectives generate valuable insights
+**6. Context Import Effectiveness**
+- **Measurement**: Correlation between context file import and approval rates
+- **Hypothesis**: Sessions with imported context have higher approval rates
+- **Target**: >10% improvement in approval rates when context imported
 
 ### Research Data Collection Requirements
 
@@ -1059,6 +1225,8 @@ For each acceptance criterion, the following must be completed:
 - Original AI suggestion text
 - Final posted comment (if approved/edited)
 - Decision time (seconds from suggestion display to action)
+- Mode active during suggestion
+- Context files imported (if any)
 - Optional rationale text from researcher
 - Session metadata (document ID, researcher ID, date)
 
@@ -1067,28 +1235,33 @@ For each acceptance criterion, the following must be completed:
 - JSON: For qualitative analysis (text comparisons, patterns)
 
 **Analysis Tools**:
-- Approval rate calculator (approve + edit / total)
-- False positive rate calculator (reject / total)
+- Mode-specific approval rate calculator
+- False positive rate calculator per mode
 - Decision time distribution (mean, median, 95th percentile)
 - Edit diff analyzer (original vs. final comment text)
+- Mode usage frequency tracker
+- Context import correlation analyzer
 
 ### Hypothesis Validation Decision Tree
 
 ```
-IF approval_rate ≥ 70% AND false_positive_rate ≤ 30%:
+IF outlier_approval ≥ 60% AND summary_approval ≥ 70% AND connect_approval ≥ 50% AND question_approval ≥ 65%:
   → Strong validation: Proceed to semi-automation (Phase 2.0)
 
-ELIF approval_rate ≥ 60% AND false_positive_rate ≤ 40%:
-  → Moderate validation: Refine prompts, continue testing
+ELIF ANY mode_approval ≥ 70%:
+  → Moderate validation: Focus on successful modes, iterate on others
 
-ELIF approval_rate < 60% OR false_positive_rate > 40%:
-  → Weak validation: Analyze rejection patterns, revise approach
+ELIF ALL mode_approvals < 40%:
+  → Weak validation: Analyze rejection patterns, revise LLM prompts
 
 IF qualitative_feedback ≥ 70% positive:
   → Confirms participant value, not just researcher preference
 
 IF edit_rate > 30%:
   → AI suggestions too generic, need more context-specific prompts
+
+IF context_import_correlation > 0.1:
+  → Context files significantly improve suggestion quality
 ```
 
 ---
@@ -1099,19 +1272,19 @@ All performance tests run on standard infrastructure:
 - **CPU**: 4 cores (2.5 GHz)
 - **RAM**: 16 GB
 - **Network**: 100 Mbps
-- **Vector DB**: ChromaDB (local SSD storage)
+- **LLM API**: Gemini 1.5 Pro (or equivalent)
 
 ### Benchmark Targets
 
-| Metric | Target | Test Method |
-|--------|--------|-------------|
-| Batch processing latency | <60s (95th percentile) | Pytest benchmark with 100 batches |
-| Embedding generation throughput | >100 segments/min | Pytest benchmark with 1000 segments |
-| Vector DB query latency | <2s (10K embeddings) | Pytest benchmark with similarity search |
-| LLM decision time | <10s (95th percentile) | Pytest benchmark with 50 decisions |
-| Comment posting latency | <3s (95th percentile) | Integration test with live Docs API |
-| Dashboard page load | <500ms | Selenium test with network throttling |
-| Dashboard WebSocket update | <5s | Integration test with triggered events |
+| Metric | Target | Critical Threshold | Test Method |
+|--------|--------|-------------------|-------------|
+| Batch processing latency | <180s (95th percentile) | <300s | Pytest benchmark with 100 batches |
+| LLM analysis time (50 contributions) | <15s (95th percentile) | <30s | Pytest benchmark with 50 analyses |
+| LLM analysis time (200 contributions) | <30s (95th percentile) | <60s | Pytest benchmark with load test |
+| Comment posting latency | <3s (95th percentile) | <5s | Integration test with live Docs API |
+| Context import time (10KB file) | <2s | <5s | Pytest benchmark with file I/O |
+| Mode switching latency | <500ms | <1s | Unit test with mode manager |
+| Terminal command response | <300ms | <500ms | Unit test with terminal UI |
 
 ---
 
@@ -1145,6 +1318,24 @@ def test_fetch_document_changes():
     # Test code here
 ```
 
+### Mock LLM Responses
+
+Use mock LLM responses for deterministic testing:
+
+```python
+import pytest
+from unittest.mock import patch
+
+@patch('llm_service.call_gemini_api')
+def test_outlier_mode_analysis(mock_llm):
+    mock_llm.return_value = {
+        "should_comment": True,
+        "comment_text": "Great outlier perspective!",
+        "confidence": 0.85
+    }
+    # Test code here
+```
+
 ---
 
 ## Continuous Validation
@@ -1155,17 +1346,17 @@ def test_fetch_document_changes():
 2. **PR checks**: All tests must pass before merge
 3. **Nightly builds**: Run full test suite + performance benchmarks
 4. **Weekly security scans**: Bandit, Safety, Trivy
-5. **Monthly human validation**: Re-test outlier detection accuracy with new data
+5. **Monthly human validation**: Re-test mode-specific approval rates with new data
 
 ### Production Monitoring
 
-1. **Daily**: Check uptime, error rates, API costs
-2. **Weekly**: Review human facilitator feedback, analyze comment resolution rates
-3. **Monthly**: Validate LLM comment relevance with random sampling
+1. **Daily**: Check uptime, error rates, API costs, mode usage distribution
+2. **Weekly**: Review researcher approval rates per mode, analyze comment resolution rates
+3. **Monthly**: Validate LLM suggestion relevance with random sampling
 4. **Quarterly**: Conduct comprehensive security audit and performance review
 
 ---
 
-**Acceptance Criteria Version**: 1.0.0
+**Acceptance Criteria Version**: 2.0.0
 **Last Updated**: 2025-11-15
-**Next Review**: After Phase 1 completion
+**Next Review**: After Phase 2 completion (LLM-only implementation)

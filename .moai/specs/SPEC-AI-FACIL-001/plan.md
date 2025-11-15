@@ -4,19 +4,28 @@
 ```yaml
 ---
 spec_id: SPEC-AI-FACIL-001
-plan_version: 1.1.0
+plan_version: 2.0.0
 created: 2025-11-15
 updated: 2025-11-15
 status: ready
-estimated_complexity: high
+estimated_complexity: medium
 ---
 ```
 
 ## Overview
 
-This implementation plan outlines the phased approach to building the AI Facilitator research tool with Wizard-of-Oz human-in-the-loop design. The system prioritizes core semantic analysis and LLM capabilities with a terminal-based researcher interface, enabling rapid validation of research hypotheses before investing in full automation or dashboard UI.
+This implementation plan outlines the **simplified 3-phase approach** to building the AI Facilitator research tool with **LLM-only analysis** (no embeddings/vector databases). The system prioritizes rapid validation of 4 agent modes through a terminal-based interface, enabling researchers to test semantic facilitation effectiveness before investing in optimization or automation.
 
 ## REVISION HISTORY
+
+### Version 2.0.0 (2025-11-15)
+- **MAJOR SIMPLIFICATION**: Removed embedding/vector database complexity (SBERT, ChromaDB, Pinecone)
+- **CHANGED**: LLM-only approach - 5 phases → 3 phases (7 weeks → 4.5 weeks)
+- **ADDED**: 4 agent modes (outlier, summary, connect, question) with mode-specific implementation
+- **ADDED**: Context file import feature (.txt files)
+- **REMOVED**: Phase 2 (Embedding & Vector DB) and Phase 3 (Analysis Engine) entirely
+- **COMBINED**: LLM analysis, terminal UI, and comment posting into single Phase 2
+- **SIMPLIFIED**: Technology stack - 15 dependencies → 8 dependencies
 
 ### Version 1.1.0 (2025-11-15)
 - **CHANGED**: Reduced from 6 phases to 5 phases
@@ -26,118 +35,178 @@ This implementation plan outlines the phased approach to building the AI Facilit
 - **ADDED**: Research data collection and analysis tools in Phase 5
 - **REMOVED**: All real-time dashboard tasks (React/Vue, WebSocket)
 
-## Implementation Phases
+## Implementation Phases (Simplified - 3 Phases)
 
-### Phase 1: Foundation & Google API Integration (Primary Goal)
+### Phase 1: Foundation & Google API Integration (Week 1-2)
 
-**Objective**: Establish core infrastructure for Google Docs monitoring and OAuth authentication.
+**Objective**: Establish core infrastructure for Google Docs monitoring, OAuth authentication, and basic terminal UI.
 
 **Deliverables**:
 - OAuth 2.0 authentication flow with Google Workspace
 - Document monitoring service with Drive API push notifications
 - Basic batch processing scheduler (90-120s intervals)
 - Document revision tracking to prevent duplicate processing
+- Terminal UI foundation with mode selection
+- Context file import functionality
 - Initial project structure and configuration management
 
 **Technical Tasks**:
 1. Set up Python 3.11+ project structure with virtual environment
-2. Install core dependencies:
+2. Install core dependencies (simplified):
    - `google-api-python-client==2.187.0`
-   - `google-auth==2.30.0`
-   - `google-auth-oauthlib==1.2.0`
+   - `google-auth==2.30.0`, `google-auth-oauthlib==1.2.0`
    - `flask==3.1.2`
-   - `redis==5.0.0`
-   - `celery==5.4.0`
+   - `redis==5.0.0`, `celery==5.4.0`
+   - `google-generativeai==0.5.0` OR `openai==1.12.0`
+   - `tiktoken==0.5.2` (token counting)
+   - `rich==13.7.0`, `click==8.1.7`, `prompt_toolkit==3.0.43`
+
 3. Implement OAuth 2.0 flow:
    - Create OAuth consent screen in Google Cloud Console
    - Implement `/auth/login` and `/auth/callback` endpoints
    - Store encrypted refresh tokens (AES-256) in secure storage
    - Implement automatic token refresh logic
+
 4. Create Document Monitor Service:
    - Implement Drive API `files.watch` subscription
    - Set up webhook endpoint for push notifications
    - Create batch processing scheduler using Celery beat
    - Implement document change fetcher using Docs API `documents.get`
+   - Extract full document content with author attribution
+
 5. Build revision tracking system:
    - Store last processed revision ID per document
    - Detect and extract new text changes since last revision
    - Handle edge cases (document deletions, permission changes)
+
 6. Set up Redis for job queue and state storage
-7. Create configuration management (YAML/JSON files for thresholds, intervals)
-8. Implement basic logging with structlog
+
+7. Create configuration management (YAML/JSON files for batch intervals, LLM settings)
+
+8. Implement terminal UI foundation:
+   - Rich terminal UI with color-coded mode display `[MODE: Outlier]`
+   - Command loop for mode selection (`mode outlier/summary/connect/question`)
+   - Document change display (timestamp, author, text preview)
+
+9. Implement context file import:
+   - `import <file>` command to load .txt files
+   - File validation (format, size <10K chars per file, total <50K)
+   - `list context` and `remove <file>` commands
+   - Token usage tracking and warnings
+
+10. Implement basic logging with structlog
 
 **Acceptance Criteria**:
 - OAuth flow successfully authenticates and stores tokens
 - Document changes trigger batch processing within 90-120 seconds
 - System correctly fetches only new changes (no duplicates)
+- Terminal UI displays mode selection and document changes
+- Context file import/list/remove commands work correctly
 - Batch scheduler runs reliably without missed cycles
 - All API errors logged with correlation IDs
 
-**Dependencies**: Google Cloud Platform account, OAuth credentials
+**Dependencies**: Google Cloud Platform account, OAuth credentials, LLM API key
+
+**Timeline**: 2 weeks
 
 ---
 
-### Phase 2: Embedding & Vector Database Integration (Primary Goal)
+### Phase 2: LLM Analysis, 4 Agent Modes & Comment Posting (Week 3-4)
 
-**Objective**: Implement semantic embedding generation and vector storage for similarity analysis.
+**Objective**: Implement LLM-powered analysis with 4 distinct agent modes, researcher approval workflow, and comment posting.
 
 **Deliverables**:
-- Embedding service with SBERT and Gemini support
-- Vector database integration (ChromaDB primary, Pinecone optional)
-- Text segmentation and preprocessing pipeline
-- Embedding storage with metadata (author, timestamp, position)
+- LLM analysis service with Gemini/GPT-4 integration
+- 4 mode-specific prompt templates (outlier, summary, connect, question)
+- Token management and context truncation
+- Researcher approval workflow (y/n/e)
+- Comment posting service with rate limiting
+- Research data logging
 
 **Technical Tasks**:
-1. Install embedding dependencies:
-   - `sentence-transformers==5.1.2` (SBERT)
-   - `google-generativeai==0.5.0` (Gemini)
-   - `chromadb==1.3.4` (Vector DB)
-   - `scikit-learn==1.5.0` (cosine similarity)
-2. Create Embedding Service:
-   - Implement SBERT embedding generation using `all-mpnet-base-v2` model
-   - Implement Gemini embedding generation using `embedding-001`
-   - Add configuration toggle for model selection
-   - Implement vector normalization to unit length
-   - Batch embedding generation (max 20 segments per API call)
-3. Build text preprocessing pipeline:
-   - Extract paragraphs/sentences from document changes
-   - Attribute text segments to authors using Docs API metadata
-   - Filter out very short contributions (<15 words)
-   - Handle special characters and formatting
-4. Integrate ChromaDB:
-   - Set up persistent storage (local filesystem or Docker volume)
-   - Create collection with metadata schema: `{text, author, timestamp, document_id, position}`
-   - Implement embedding storage with batch upsert
-   - Create indexes for efficient similarity search
-5. Implement similarity search:
-   - Cosine similarity calculation using scikit-learn
-   - Query vector database for top-k similar embeddings
-   - Filter results by document_id and time window (last 100 contributions)
-6. Add error handling:
-   - Retry logic for embedding API failures
-   - Fallback to alternative model if primary fails
-   - Logging for failed segments with text samples
+
+1. Create LLM Analysis Service:
+   - Implement Gemini `gemini-1.5-pro` OR GPT-4 `gpt-4-turbo` integration
+   - Create mode-specific prompt template system
+   - Implement structured JSON response parsing
+
+2. Implement 4 Agent Mode Prompt Templates:
+   - **Outlier Mode**: Prompt for uniqueness detection, similarity scoring (0.0-1.0), encouragement message generation
+   - **Summary Mode**: Prompt for clustering, theme identification, summary generation with contributor counts
+   - **Connect Mode**: Prompt for finding similar ideas from different authors, connection message generation
+   - **Question Mode**: Prompt for Socratic questioning based on contribution depth and assumptions
+
+3. Build LLM Prompt Construction:
+   - Assemble full document text with author attribution
+   - Prepend imported context files (if any)
+   - Add mode-specific instructions and output format requirements
+   - Count tokens using tiktoken library
+
+4. Implement Token Management:
+   - Token counting for document + context files
+   - Truncation strategy: Remove oldest contributions if >128K tokens
+   - Always preserve imported context files
+   - Warning display when approaching token limits
+
+5. Create Researcher Approval Workflow:
+   - Display LLM analysis results in terminal (mode, suggestion, confidence, reasoning)
+   - Interactive prompt: "Post this comment? (y/n/e)"
+   - (y) Post as-is → Comment Posting Service
+   - (n) Reject and log → Research Data Logger
+   - (e) Edit mode → Inline text editor → Post edited version
+
+6. Build Comment Posting Service:
+   - Integrate Google Docs API `documents.batchUpdate` with `createComment`
+   - Format comments with mode attribution: `[AI Facilitator - {Mode}] {comment_text}`
+   - Include metadata: timestamp, mode, confidence score
+   - Position mapping for comment anchoring
+
+7. Implement rate limiting:
+   - Maximum 1 comment per 60 seconds per document
+   - Pause commenting when ≥5 unresolved AI comments exist
+   - Queue pending comments with priority ordering
+
+8. Add deduplication:
+   - Check for existing comments at same text position
+   - Compare comment text similarity to prevent near-duplicates
+   - Track posted comments in database with document + position hash
+
+9. Create Research Data Logger:
+   - Structured logging: decision_type, mode, original_suggestion, final_comment, timestamp, researcher_id
+   - CSV export for quantitative analysis (approval rates, timing)
+   - JSON export for qualitative analysis (text comparisons, patterns)
+
+10. Implement retry mechanisms:
+    - Retry comment posting once after 5 seconds on API error
+    - Log failures for manual review
+    - Persist failed comments to retry queue
 
 **Acceptance Criteria**:
-- Embeddings generated for 100+ text segments per minute
-- Vector database stores embeddings with all required metadata
-- Similarity search returns results in <2 seconds for 10,000 embeddings
-- System gracefully handles embedding API failures
-- Embedding generation success rate >95%
+- LLM analysis completes in <15 seconds (95th percentile)
+- All 4 agent modes work correctly with mode-specific prompts
+- Researcher can approve/reject/edit suggestions interactively
+- Comment posting success rate >98% (excluding rate limit pauses)
+- All decisions logged with mode, timestamps, and rationale
+- Zero duplicate comments at same position
+- Token management prevents context overflow
 
-**Dependencies**: Phase 1 completion, ChromaDB setup
+**Dependencies**: Phase 1 completion, LLM API access
+
+**Timeline**: 1.5 weeks
 
 ---
 
-### Phase 3: Analysis Engine (Outlier Detection & Related Ideas) (Primary Goal)
+### Phase 3: Production Hardening & Research Data Collection (Week 5)
 
-**Objective**: Build intelligent analysis algorithms for identifying outliers and connecting related ideas.
+**Objective**: Prepare system for research deployment with testing, monitoring, reliability improvements, and comprehensive research data collection capabilities.
 
 **Deliverables**:
-- Outlier detection algorithm with configurable thresholds
-- Related idea clustering and connection logic
-- Novelty scoring system
-- Moving window similarity comparison
+- Comprehensive test suite (unit, integration, end-to-end)
+- Monitoring and alerting infrastructure
+- Research data export and analysis tools
+- Session recording and playback capabilities
+- Production deployment configuration
+- Documentation and researcher onboarding guides
 
 **Technical Tasks**:
 1. Install analysis dependencies:

@@ -5,7 +5,7 @@
 ---
 spec_id: SPEC-AI-FACIL-001
 title: "AI Facilitator Agent for Google Docs Collaboration"
-version: 1.1.0
+version: 2.0.0
 status: draft
 created: 2025-11-15
 updated: 2025-11-15
@@ -15,6 +15,15 @@ priority: high
 ```
 
 ## HISTORY
+
+### Version 2.0.0 (2025-11-15)
+- **MAJOR SIMPLIFICATION**: Removed embedding/vector database complexity (SBERT, ChromaDB, Pinecone)
+- **CHANGED**: LLM-only approach - pass full document context directly to LLM for all analysis
+- **ADDED**: 4 distinct agent modes (outlier detection, summary, connections, questions)
+- **ADDED**: Context file import feature (.txt files to augment LLM knowledge)
+- **REMOVED**: Embedding Service, Vector Database, Semantic Similarity Calculations
+- **SIMPLIFIED**: 5 phases → 3 phases (4.5 weeks timeline)
+- **RATIONALE**: Prove concept with simplest implementation. LLMs excel at semantic analysis without embeddings.
 
 ### Version 1.1.0 (2025-11-15)
 - **REVISED**: Removed real-time dashboard (React/Vue, WebSocket, Chart.js)
@@ -29,32 +38,43 @@ priority: high
 
 ## Executive Summary
 
-A semi-automated research tool that monitors shared Google Docs, analyzes contributions using semantic embeddings, identifies outlier ideas, and provides AI-generated comment suggestions through a terminal-based interface where researchers maintain full control. Using a Wizard-of-Oz approach, researchers preview, edit, and manually approve all AI interventions before posting to validate the effectiveness of semantic analysis and LLM-powered facilitation strategies.
+A simplified research tool that monitors shared Google Docs and uses LLM-powered analysis to facilitate collaboration through 4 distinct agent modes. Researchers select modes via terminal (outlier detection, summary, connections, questions) and approve all AI interventions before posting. The system passes full document context directly to LLMs without embeddings or vector databases, enabling rapid validation of semantic facilitation strategies.
 
 ## Business Context
 
 ### Problem Statement
-In collaborative document editing sessions, unique or outlier ideas can get lost in the flow of contributions. Human facilitators struggle to identify connections between ideas from different users in real-time, leading to missed opportunities for synthesis and innovation.
+In collaborative document editing sessions, facilitators need intelligent support for **4 distinct tasks**:
+
+1. **Incentivize Unique Concepts**: Highlighting truly novel ideas that differ from group consensus
+2. **Overview Prevalent Ideas**: Summarizing common themes and clusters to show researchers discussion patterns
+3. **Foster Connections**: Connecting contributors with similar perspectives to encourage collaboration
+4. **Give Clarifying Questions**: Socratic questioning to deepen contributor thinking
+
+Human facilitators cannot perform all 4 tasks simultaneously in real-time, leading to missed opportunities for synthesis and innovation.
 
 ### Solution Overview
-A semi-automated research tool that:
+An LLM-powered research tool with 4 selectable agent modes:
+
+**System Architecture**:
 - Monitors Google Docs changes using batch processing (90-120 second intervals)
-- Analyzes semantic meaning of contributions using embeddings
-- Identifies outlier ideas via cosine similarity analysis
-- Generates AI comment suggestions via LLM
-- Presents suggestions through terminal interface for researcher review
-- Enables manual approval, editing, or rejection of all interventions
-- Supports on-demand analysis from specific perspectives
-- Logs all decisions for research analysis
+- Passes full document context directly to LLM (no embeddings/vector DB)
+- Researcher selects agent mode via terminal: `mode outlier`, `mode summary`, `mode connect`, `mode question`
+- LLM analyzes contributions using mode-specific prompt templates
+- Generates intervention suggestions (encouragement, summaries, connections, questions)
+- Researcher approves/edits/rejects suggestions via terminal (y/n/e)
+- Posts approved comments to Google Docs
+- Supports context file import to augment LLM knowledge (.txt files)
+
+**Key Simplification**: All semantic analysis handled by LLM. No separate embedding service or vector database needed.
 
 ### Success Criteria
-- Detection of outlier ideas with >85% accuracy (human validation)
-- AI suggestion generation latency <3 minutes from contribution
-- Researcher approval rate >60% for AI-generated suggestions
-- Zero duplicate or contradictory automated comments
-- Qualitative feedback confirms AI interventions improve collaboration
+- LLM analysis latency <15 seconds per batch
+- Researcher approval rate >60% overall (mode-specific targets vary)
+- Outlier mode approval: >60% | Summary mode: >70% | Connect mode: >50% | Question mode: >65%
 - System uptime >99.5% during research sessions
-- Research data collection enables hypothesis validation
+- Zero duplicate comments posted
+- Context import success rate: 100%
+- Qualitative feedback confirms AI interventions improve collaboration
 
 ## EARS Requirements
 
@@ -66,17 +86,17 @@ A semi-automated research tool that:
 
 **E-003**: The system SHALL support multiple concurrent document monitoring sessions (minimum 10 simultaneous documents).
 
-**E-004**: The system SHALL store vector embeddings in a persistent vector database (ChromaDB or Pinecone).
+**E-004**: The system SHALL interface with LLM services (Gemini or GPT-4) for all semantic analysis and intervention generation.
 
-**E-005**: The system SHALL use semantic embedding models (SBERT or Gemini embeddings) for text analysis.
+**E-005**: The system SHALL provide a terminal-based interface for researcher interaction, mode selection, and approval control.
 
-**E-006**: The system SHALL interface with LLM services (Gemini or GPT-4) for intervention decision-making.
+**E-006**: The system SHALL process document changes in batch intervals of 90-120 seconds to prevent interruption fatigue.
 
-**E-007**: The system SHALL provide a terminal-based interface for researcher interaction and control.
+**E-007**: The system SHALL log all researcher decisions (approve, edit, reject) with timestamps and rationale for research analysis.
 
-**E-008**: The system SHALL process document changes in batch intervals of 90-120 seconds to prevent interruption fatigue.
+**E-008**: The system SHALL support 4 distinct agent modes selectable by researcher: outlier detection, summary, connections, questions.
 
-**E-009**: The system SHALL log all researcher decisions (approve, edit, reject) with timestamps and rationale for research analysis.
+**E-009**: The system SHALL allow importing .txt context files to augment LLM analysis with domain knowledge, guidelines, or meeting notes.
 
 ### Assumptions (Design Constraints)
 
@@ -84,15 +104,15 @@ A semi-automated research tool that:
 
 **A-002**: The system ASSUMES users have granted OAuth 2.0 permissions for document read/write access.
 
-**A-003**: The system ASSUMES embedding model API calls complete within 5 seconds per batch.
+**A-003**: The system ASSUMES LLM API calls for analysis complete within 15 seconds per batch.
 
-**A-004**: The system ASSUMES vector database similarity searches complete within 2 seconds.
+**A-004**: The system ASSUMES LLMs (Gemini 1.5 Pro or GPT-4) have sufficient context window to handle full document text (up to 128K tokens).
 
-**A-005**: The system ASSUMES LLM API calls for intervention decisions complete within 10 seconds.
+**A-005**: The system ASSUMES network latency between components averages <100ms.
 
-**A-006**: The system ASSUMES network latency between components averages <100ms.
+**A-006**: The system ASSUMES document changes per batch interval average <50 distinct contributions.
 
-**A-007**: The system ASSUMES document changes per batch interval average <50 distinct contributions.
+**A-007**: The system ASSUMES imported context files are plain text (.txt) and total <50,000 characters per session.
 
 ### Requirements (Functional Specifications)
 
@@ -112,161 +132,192 @@ A semi-automated research tool that:
 
 **R1.7**: The system SHALL log all document access events with timestamps, user IDs, and change summaries.
 
-#### R2: Semantic Analysis and Embedding
+#### R2: LLM-Based Analysis with 4 Agent Modes
 
-**R2.1**: WHEN new text contributions are detected, the system SHALL extract distinct text segments (paragraphs or sentences) with author attribution.
+**R2.1**: WHEN new contributions are detected, the system SHALL pass full document context to LLM including:
+- All document text (up to 128K tokens)
+- Author attribution for each contribution
+- Timestamps and contribution sequence
+- Imported context files (if any)
 
-**R2.2**: The system SHALL generate semantic embeddings for each text segment using SBERT (sentence-transformers) or Gemini embeddings API.
+**R2.2**: The system SHALL support 4 agent modes selectable via terminal command:
+- `mode outlier` - Outlier/unique idea detection mode
+- `mode summary` - Clustering and summary mode
+- `mode connect` - Similarity/connection detection mode
+- `mode question` - Socratic questioning mode
 
-**R2.3**: The system SHALL normalize all embedding vectors to unit length for cosine similarity calculations.
+**R2.3**: The terminal SHALL display current active mode prominently (e.g., `[MODE: Outlier Detection]`).
 
-**R2.4**: The system SHALL store embeddings in vector database with metadata: {text, author, timestamp, document_id, position}.
+**R2.4**: The system SHALL use mode-specific LLM prompt templates optimized for each analysis type.
 
-**R2.5**: IF embedding generation fails for a text segment, the system SHALL log the error and continue processing remaining segments.
+**R2.5**: The system SHALL manage LLM context token usage to stay within 128K token limit (Gemini 1.5 Pro or GPT-4).
 
-**R2.6**: The system SHALL batch embedding API calls to minimize latency (maximum 20 segments per API request).
+**R2.6**: IF token limit is approached, the system SHALL truncate oldest contributions while preserving imported context files.
 
-#### R3: Outlier Detection
+#### R2A: Mode-Specific Analysis Requirements
 
-**R3.1**: WHEN new embeddings are stored, the system SHALL perform cosine similarity search against all existing embeddings in the same document session.
+**R2A.1 - Outlier Mode**: WHEN in outlier mode, the LLM SHALL:
+- Analyze new contribution semantic uniqueness compared to all previous contributions
+- Calculate similarity score (0.0-1.0) representing deviation from group consensus
+- Generate encouragement message if similarity <0.3: "🌟 Unique idea detected! This perspective hasn't been explored yet."
+- Provide reasoning for uniqueness assessment
 
-**R3.2**: The system SHALL identify outliers as text segments with average cosine similarity <0.6 (configurable threshold) to all other contributions.
+**R2A.2 - Summary Mode**: WHEN in summary mode, the LLM SHALL:
+- Group similar contributions into clusters
+- Identify common themes and perspectives
+- Generate summary output format:
+  ```
+  Summary of current discussion:
+  - Group 1 (N people): [theme description]
+  - Group 2 (M people): [theme description]
+  ```
+- Include representative contributors for each cluster
 
-**R3.3**: The system SHALL rank outliers by novelty score: novelty = (1 - max_similarity) * contribution_length_weight.
+**R2A.3 - Connect Mode**: WHEN in connect mode, the LLM SHALL:
+- Find contributors with semantically similar ideas
+- Identify collaboration opportunities
+- Generate connection message: "@CurrentUser, your idea is similar to @OtherUser's point about [topic]!"
+- Explain the connection rationale
 
-**R3.4**: IF multiple outliers are detected in a single batch, the system SHALL prioritize the top 3 by novelty score.
+**R2A.4 - Question Mode**: WHEN in question mode, the LLM SHALL:
+- Analyze contribution depth and assumptions
+- Generate thought-provoking Socratic questions
+- Example: "Interesting point! Have you considered how this might work for [edge case]?"
+- Focus on deepening contributor thinking, not criticism
 
-**R3.5**: The system SHALL maintain a moving window of the last 100 contributions for similarity comparison.
+#### R3: Context File Import
 
-**R3.6**: The system SHALL exclude very short contributions (<15 words) from outlier analysis.
+**R3.1**: The terminal SHALL support command: `import context.txt` to add files to LLM context.
 
-#### R4: Related Idea Connection
+**R3.2**: The system SHALL store imported files in session and prepend to every LLM prompt: "Background context: [file contents]".
 
-**R4.1**: WHEN processing new contributions, the system SHALL perform similarity search to find related ideas from different authors.
+**R3.3**: The terminal SHALL support commands:
+- `list context` - Show all imported files with sizes
+- `remove context.txt` - Remove file from context
 
-**R4.2**: The system SHALL identify related ideas as pairs with cosine similarity >0.75 (configurable threshold) from different users.
+**R3.4**: The system SHALL validate imported files:
+- File format: Plain text (.txt) only
+- File size: <10,000 characters per file
+- Total context: <50,000 characters across all files
 
-**R4.3**: The system SHALL group related ideas into clusters using hierarchical clustering with similarity threshold 0.7.
+**R3.5**: IF file validation fails, the system SHALL display error message and reject import.
 
-**R4.4**: IF a cluster contains ideas from ≥3 different authors, the system SHALL flag it as a "convergent theme".
+**R3.6**: The system SHALL track context token usage and warn researcher if approaching limits.
 
-**R4.5**: The system SHALL limit related idea connections to maximum 5 pairs per batch to avoid overwhelming users.
+#### R4: LLM-Powered Intervention Generation
 
-#### R5: LLM-Powered Intervention Decision
+**R4.1**: WHEN analysis is triggered (batch or on-demand), the system SHALL construct mode-specific prompt including:
+- Full document text
+- Imported context files
+- Mode-specific analysis instructions
+- Output format requirements (JSON structure)
 
-**R5.1**: WHEN outliers or related ideas are identified, the system SHALL construct a decision prompt for LLM including:
-- Original text segments
-- Similarity scores
-- Author metadata
-- Document context (previous 500 words)
+**R4.2**: The system SHALL use LLM (Gemini 1.5 Pro or GPT-4) with structured output parsing.
 
-**R5.2**: The system SHALL use LLM (Gemini or GPT-4) to decide WHETHER to post a comment based on:
-- Relevance to document topic
-- Potential value of highlighting the outlier/connection
-- Avoidance of redundancy with previous comments
-- Appropriateness of intervention timing
+**R4.3**: The LLM SHALL return JSON response: `{should_comment: boolean, comment_text: string, confidence: float, reasoning: string}`.
 
-**R5.3**: The LLM SHALL return a structured JSON response: {should_comment: boolean, comment_text: string, confidence: float}.
+**R4.4**: The system SHALL parse LLM response and display in terminal for researcher approval.
 
-**R5.4**: IF LLM confidence score <0.7, the system SHALL NOT post the comment and log the decision for human review.
+**R4.5**: IF LLM API call fails or times out (>15 seconds), the system SHALL display error and allow retry or skip.
 
-**R5.5**: The system SHALL implement LLM prompt caching to reduce API costs for repeated document contexts.
+**R4.6**: The system SHALL implement LLM prompt caching to reduce API costs for repeated document contexts (where supported).
 
-**R5.6**: IF LLM API call fails or times out (>10 seconds), the system SHALL fall back to rule-based commenting with conservative thresholds.
+#### R5: Comment Posting
 
-#### R6: Automated Comment Posting
+**R5.1**: WHEN researcher approves comment (y), the system SHALL post to Google Docs using Docs API at relevant text position.
 
-**R6.1**: WHEN LLM approves a comment, the system SHALL post the comment to Google Docs using Docs API at the relevant text position.
+**R5.2**: The system SHALL format comments with mode attribution: `[AI Facilitator - {Mode}] {comment_text}`.
 
-**R6.2**: The system SHALL format comments with clear attribution: "[AI Facilitator] {comment_text}".
+**R5.3**: The system SHALL include metadata in comment: timestamp, mode, confidence score.
 
-**R6.3**: The system SHALL include metadata in comment: timestamp, confidence score, analysis type (outlier/related).
+**R5.4**: IF comment posting fails due to API errors, the system SHALL retry once after 5 seconds, then log failure.
 
-**R6.4**: IF comment posting fails due to API errors, the system SHALL retry once after 5 seconds, then log failure.
+**R5.5**: The system SHALL prevent duplicate comments by checking if a comment already exists at the same text position.
 
-**R6.5**: The system SHALL prevent duplicate comments by checking if a comment already exists at the same text position.
+**R5.6**: The system SHALL rate-limit comment posting to maximum 1 comment per 60 seconds per document to avoid spam.
 
-**R6.6**: The system SHALL rate-limit comment posting to maximum 1 comment per 60 seconds per document to avoid spam.
+**R5.7**: WHILE a document has ≥5 unresolved AI-generated comments, the system SHALL pause new comment posting until count drops below 3.
 
-**R6.7**: WHILE a document has ≥5 unresolved AI-generated comments, the system SHALL pause new comment posting until count drops below 3.
+#### R6: Terminal-Based Researcher Interface
 
-#### R7: Terminal-Based Researcher Interface
-
-**R7.1**: The system SHALL display document changes in terminal output with:
+**R6.1**: The system SHALL display document changes in terminal output with:
 - Timestamp of change
 - Author identification
 - Text preview (first 200 characters)
 - Change type (new paragraph, edit, deletion)
 
-**R7.2**: WHEN semantic analysis detects outliers or related ideas, the system SHALL display:
-- Analysis type (outlier / related idea / convergent theme)
-- Similarity scores and novelty metrics
-- Affected text segments with author attribution
-- LLM-generated comment suggestion with confidence score
+**R6.2**: WHEN LLM analysis completes, the system SHALL display:
+- Current agent mode (e.g., `[MODE: Outlier Detection]`)
+- Analysis results (unique ideas, clusters, connections, questions)
+- LLM-generated intervention suggestion with confidence score
+- LLM reasoning for suggestion
 
-**R7.3**: FOR EACH AI-generated suggestion, the system SHALL prompt researcher with options:
+**R6.3**: FOR EACH AI-generated suggestion, the system SHALL prompt researcher with options:
 - `(y)` Post comment as-is
 - `(n)` Reject and skip
 - `(e)` Edit comment text before posting
-- `(c)` Customize LLM prompt and regenerate
 
-**R7.4**: The terminal interface SHALL support on-demand analysis commands:
-- `analyze [perspective]` - Request LLM analysis from specific viewpoint (e.g., "analyze from conflict resolution perspective")
-- `status` - Show current monitoring status and batch cycle countdown
+**R6.4**: The terminal interface SHALL support mode selection commands:
+- `mode outlier` - Switch to outlier detection mode
+- `mode summary` - Switch to summary/clustering mode
+- `mode connect` - Switch to connection detection mode
+- `mode question` - Switch to Socratic question mode
+
+**R6.5**: The terminal interface SHALL support additional commands:
+- `analyze` - Trigger immediate LLM analysis (batch cycle independent)
+- `status` - Show current mode, monitoring status, batch cycle countdown
 - `history` - Display recent interventions and decisions
 - `pause` / `resume` - Control batch processing
+- `import <file>` - Import context file
+- `list context` - Show imported context files
+- `remove <file>` - Remove context file
 
-**R7.5**: The system SHALL log all researcher decisions with structured data:
-- Decision type (approve / reject / edit / custom_prompt)
+**R6.6**: The system SHALL log all researcher decisions with structured data:
+- Decision type (approve / reject / edit)
+- Agent mode active
 - Original AI suggestion
 - Final posted comment (if approved)
 - Timestamp and researcher ID
 - Optional rationale text
 
-**R7.6**: The terminal interface SHALL allow prompt customization before LLM calls:
-- Display default prompt template
-- Allow inline editing
-- Show prompt token count
-- Preview expected LLM behavior
-
-**R7.7**: The system SHALL provide session statistics in terminal:
+**R6.7**: The system SHALL provide session statistics in terminal:
 - Total contributions analyzed this session
-- AI suggestions generated
-- Researcher approval rate
-- False positive rate (rejected suggestions)
+- AI suggestions generated (by mode)
+- Researcher approval rate overall and per mode
 - Average time to decision
+- Imported context files count and total size
 
 ### Specifications (Non-Functional Requirements)
 
 #### S1: Performance
 
-**S1.1**: The system SHALL process each batch cycle (document fetch → embedding → analysis → LLM → comment) in <60 seconds (95th percentile).
+**S1.1**: The system SHALL process each batch cycle (document fetch → LLM analysis → comment) in <60 seconds (95th percentile).
 
-**S1.2**: The system SHALL handle documents up to 50,000 words without performance degradation.
+**S1.2**: The system SHALL handle documents up to 50,000 words (approximately 65,000 tokens) without performance degradation.
 
-**S1.3**: Vector database similarity searches SHALL complete in <2 seconds for 10,000 stored embeddings.
+**S1.3**: LLM analysis calls SHALL complete in <15 seconds (95th percentile) for documents up to 128K tokens.
 
 **S1.4**: The terminal interface SHALL respond to researcher commands within <500ms.
 
-**S1.5**: Embedding generation SHALL achieve throughput of ≥100 text segments per minute.
+**S1.5**: Context file import SHALL validate and load files within <2 seconds per file.
 
 #### S2: Scalability
 
 **S2.1**: The system SHALL support horizontal scaling of worker processes for batch processing (minimum 3 workers).
 
-**S2.2**: Vector database SHALL support partitioning by document_id for distributed storage.
+**S2.2**: The system SHALL use connection pooling for Google API clients (minimum pool size: 5 connections).
 
-**S2.3**: The system SHALL use connection pooling for Google API clients (minimum pool size: 5 connections).
+**S2.3**: The system SHALL implement job queue (Redis/Celery) for asynchronous task processing.
 
-**S2.4**: The system SHALL implement job queue (Redis/Celery) for asynchronous task processing.
+**S2.4**: The system SHALL handle up to 10 simultaneous document monitoring sessions with independent LLM contexts.
 
 #### S3: Reliability
 
 **S3.1**: The system SHALL achieve 99.5% uptime during scheduled collaboration sessions.
 
-**S3.2**: The system SHALL implement circuit breaker pattern for external API calls (Google, LLM, embedding services).
+**S3.2**: The system SHALL implement circuit breaker pattern for external API calls (Google, LLM services).
 
-**S3.3**: IF vector database becomes unavailable, the system SHALL fall back to in-memory similarity search with persistence queue.
+**S3.3**: IF LLM API becomes unavailable, the system SHALL queue analysis tasks and alert researcher to retry later.
 
 **S3.4**: The system SHALL persist all unprocessed batches to disk to survive service restarts without data loss.
 
@@ -328,78 +379,69 @@ A semi-automated research tool that:
 
 ## Technical Architecture
 
-### System Components
+### System Components (Simplified)
 
 1. **Document Monitor Service**
    - Google Drive API change notification subscriber
    - Batch processing scheduler (90-120s intervals)
    - Document revision tracker
 
-2. **Embedding Service**
-   - SBERT/Gemini API integration
-   - Vector normalization and storage
-   - Batch embedding generation
-
-3. **Vector Database**
-   - ChromaDB or Pinecone
-   - Similarity search engine
-   - Metadata filtering support
-
-4. **Analysis Engine**
-   - Outlier detection algorithm
-   - Related idea clustering
-   - Novelty scoring
-
-5. **LLM Decision Service**
+2. **LLM Analysis Service** (Core - replaces Embedding + Vector DB + Analysis Engine)
    - Gemini/GPT-4 API integration
-   - Prompt construction and caching
-   - Structured response parsing
+   - Mode-specific prompt templates (4 modes)
+   - Full document context management
+   - Token counting and truncation
+   - Structured response parsing (JSON)
+   - Prompt caching (where supported)
 
-6. **Comment Posting Service**
+3. **Context Manager**
+   - Imported context file storage
+   - Token usage tracking
+   - Context file validation (.txt format, size limits)
+   - Context prepending to LLM prompts
+
+4. **Comment Posting Service**
    - Google Docs API integration
    - Rate limiting and deduplication
    - Retry logic with backoff
 
-7. **Terminal Interface (Researcher Control)**
-   - Rich terminal UI (Python `rich` library) or simple CLI
-   - Interactive prompts for approval/rejection
-   - Command interpreter for on-demand analysis
-   - Session statistics display
+5. **Terminal Interface (Researcher Control)**
+   - Rich terminal UI (Python `rich` library)
+   - Interactive prompts for approval/rejection (y/n/e)
+   - Mode selection commands (mode outlier/summary/connect/question)
+   - Context file import commands (import/list/remove)
+   - Session statistics display with per-mode breakdown
 
-8. **Research Data Logger**
-   - Structured logging of all decisions
+6. **Research Data Logger**
+   - Structured logging of all decisions with agent mode
    - CSV/JSON export for analysis
    - Timestamped decision tracking
    - Researcher ID attribution
 
-9. **Job Queue & Workers**
+7. **Job Queue & Workers**
    - Redis/Celery for async processing
    - Worker pool for parallel batch processing
    - Task persistence and retry
 
-### Technology Stack
+### Technology Stack (Simplified)
 
 #### Backend Services
 - **Runtime**: Python 3.11+
 - **Web Framework**: Flask 3.1.2 (async support via Quart if needed)
 - **API Client**: google-api-python-client 2.187.0
 - **OAuth**: google-auth 2.30.0, google-auth-oauthlib 1.2.0
-- **Embedding**: sentence-transformers 5.1.2 (SBERT) OR google-generativeai 0.5.0 (Gemini)
-- **Vector Database**: chromadb 1.3.4 OR pinecone-client 3.2.2
-- **LLM**: google-generativeai 0.5.0 (Gemini) OR openai 1.40.0 (GPT-4)
+- **LLM**: google-generativeai 0.5.0 (Gemini) OR openai 1.12.0 (GPT-4)
 - **Job Queue**: celery 5.4.0, redis 5.0.0
 - **Async Support**: asyncio, aiohttp 3.9.0
 
 #### Data Processing
-- **Embeddings**: sentence-transformers (all-MiniLM-L6-v2 or all-mpnet-base-v2)
-- **Similarity**: cosine_similarity from scikit-learn 1.5.0
-- **Clustering**: scipy 1.13.0 (hierarchical clustering)
+- **Token Counting**: tiktoken 0.5.2 (manage LLM context limits)
+- **Text Parsing**: Built-in Python (no external libraries needed)
 
 #### Terminal Interface
 - **Terminal UI**: rich 13.7.0 (Python rich text and terminal UI)
-- **CLI Framework**: click 8.1.7 or typer 0.9.0 (command-line interface)
+- **CLI Framework**: click 8.1.7 (command-line interface)
 - **Input Prompts**: prompt_toolkit 3.0.43 (interactive prompts)
-- **Progress Display**: tqdm 4.66.0 (progress bars and status)
 
 #### Infrastructure
 - **HTTP Server**: Gunicorn 22.0.0 with async workers OR uvicorn 0.29.0
@@ -413,7 +455,15 @@ A semi-automated research tool that:
 - **Linting**: ruff 0.5.0, mypy 1.10.0
 - **Formatting**: black 24.4.0
 
-### Data Flow (Wizard-of-Oz Human-in-the-Loop)
+#### Removed Dependencies (v2.0 Simplification)
+- ❌ sentence-transformers 5.1.2 (SBERT embeddings)
+- ❌ chromadb 1.3.4 (vector database)
+- ❌ pinecone-client 3.2.2 (alternative vector DB)
+- ❌ scikit-learn 1.5.0 (cosine similarity)
+- ❌ scipy 1.13.0 (hierarchical clustering)
+- ✅ Replaced with: LLM-only analysis (10x simpler, 3x faster to build)
+
+### Data Flow (Simplified LLM-Only Approach)
 
 ```
 1. Google Doc Change Event
@@ -422,40 +472,43 @@ A semi-automated research tool that:
    ↓
 3. Queue document for batch processing (90-120s interval)
    ↓
-4. Batch Processor: Fetch changes via Docs API
+4. Batch Processor: Fetch full document content via Docs API
    ↓
-5. Display changes in Terminal Interface
+5. Display changes in Terminal Interface with current agent mode [MODE: X]
    ↓
-6. Extract text segments with author attribution
+6. Construct LLM prompt:
+   - Full document text with author attribution
+   - Imported context files (if any)
+   - Mode-specific analysis instructions (outlier/summary/connect/question)
+   - Token count check (<128K tokens)
    ↓
-7. Embedding Service: Generate vectors (SBERT/Gemini)
+7. LLM Analysis Service: Call Gemini/GPT-4
    ↓
-8. Store embeddings in Vector DB (ChromaDB/Pinecone)
+8. LLM performs ALL analysis:
+   - Outlier mode: Compare new contributions to all previous, calculate similarity
+   - Summary mode: Group contributions into clusters, identify themes
+   - Connect mode: Find similar ideas from different authors
+   - Question mode: Generate Socratic questions based on contribution
    ↓
-9. Analysis Engine: Cosine similarity search
+9. Display LLM-generated intervention suggestion in Terminal
+   - Analysis results (uniqueness scores, clusters, connections, questions)
+   - Suggested comment text
+   - Confidence score and reasoning
    ↓
-10. Identify outliers (<0.6 similarity) & related ideas (>0.75 similarity)
+10. Researcher Review Loop:
+    a. Display prompt: "Post this comment? (y/n/e)"
+    b. IF (y): Post comment via Docs API → Go to 12
+    c. IF (n): Skip and log rejection → Go to 12
+    d. IF (e): Allow editing → Post edited version → Go to 12
     ↓
-11. Display analysis results in Terminal Interface
+11. Optional: Mode switching or on-demand analysis
+    - `mode [type]`: Switch agent mode
+    - `analyze`: Trigger immediate analysis
+    - `import [file]`: Add context file → Prepend to future LLM prompts
     ↓
-12. LLM Decision Service: Construct prompt + call Gemini/GPT-4
+12. Log decision (approve/reject/edit) with mode, timestamp, rationale
     ↓
-13. Display LLM-generated comment suggestion in Terminal
-    ↓
-14. Researcher Review Loop:
-    a. Display prompt: "Post this comment? (y/n/e/c)"
-    b. IF (y): Post comment via Docs API → Go to 16
-    c. IF (n): Skip and log rejection → Go to 16
-    d. IF (e): Allow editing → Post edited version → Go to 16
-    e. IF (c): Customize prompt → Regenerate LLM response → Go to 13
-    ↓
-15. Optional: On-demand analysis
-    Researcher types: "analyze from [perspective]"
-    → LLM generates custom analysis → Display in Terminal → Go to 14
-    ↓
-16. Log decision (approve/reject/edit) with timestamp and rationale
-    ↓
-17. Update Terminal statistics display (approval rate, session stats)
+13. Update Terminal statistics display (approval rate per mode, session stats)
 ```
 
 ### API Integration Points
@@ -472,17 +525,15 @@ A semi-automated research tool that:
    - Scopes: `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/documents`
    - Token storage: Encrypted at rest, automatic refresh
 
-4. **Embedding APIs**
-   - SBERT: Local inference (sentence-transformers library)
-   - Gemini: `embedding-001` model via `google.generativeai.embed_content`
+4. **LLM APIs** (Primary - All Analysis)
+   - Gemini: `gemini-1.5-pro` via `google.generativeai.GenerativeModel` (128K context window)
+   - GPT-4: `gpt-4-turbo` or `gpt-4o` via OpenAI Python client (128K context window)
+   - Structured output: JSON mode for consistent response parsing
 
-5. **Vector Database**
-   - ChromaDB: Local/cloud deployment, persistent storage
-   - Pinecone: Cloud-managed, serverless option
-
-6. **LLM APIs**
-   - Gemini: `gemini-1.5-pro` via `google.generativeai.GenerativeModel`
-   - GPT-4: `gpt-4-turbo` via OpenAI Python client
+5. **Token Management**
+   - tiktoken library for token counting
+   - Context window management (<128K tokens)
+   - Truncation strategy: Oldest contributions first, preserve context files
 
 ## Design Decisions
 
@@ -501,46 +552,66 @@ A semi-automated research tool that:
 - Requires buffering and revision tracking
 - More complex state management
 
-### SBERT vs. Gemini Embeddings
+### LLM-Only Analysis (No Embeddings/Vector DB)
 
-**Decision**: Support both with configuration option, default to SBERT for cost efficiency.
+**Decision**: Pass full document context directly to LLM for all semantic analysis. No separate embedding generation or vector database.
 
-**Rationale**:
-- SBERT: Free, local inference, faster for small batches, proven accuracy
-- Gemini: Cloud-based, potentially better for long-form text, easier scaling
-- Allow users to choose based on budget and performance needs
+**Rationale (v2.0 Simplification)**:
+- **Proof of concept first**: Validate LLM facilitation effectiveness before optimizing
+- **LLMs excel at semantic analysis**: Gemini/GPT-4 already understand similarity, clustering, uniqueness
+- **10x simpler architecture**: Eliminate 3 complex subsystems (Embedding Service, Vector DB, Similarity Search)
+- **3x faster to build**: 5 phases → 3 phases (4.5 weeks vs 7+ weeks)
+- **Sufficient for research scale**: <1000 contributions per session fits easily in 128K context window
+- **Lower costs initially**: No vector DB hosting, no embedding API calls (only LLM calls)
 
-**Trade-offs**:
-- Dual implementation complexity
-- Different embedding dimensions require separate vector DB indexes
-
-### ChromaDB vs. Pinecone
-
-**Decision**: Default to ChromaDB for self-hosted deployments, offer Pinecone for cloud.
-
-**Rationale**:
-- ChromaDB: Open-source, local/docker deployment, no external dependencies, free
-- Pinecone: Managed service, better horizontal scaling, serverless option
-- Most users prefer control over data (ChromaDB)
+**When to add embeddings** (future if needed):
+- Scaling to 10,000+ contributions per document (exceeds LLM context window)
+- Sub-second analysis latency required (LLM takes 10-15s, embeddings <2s)
+- Cost optimization for high-volume production (embeddings cheaper than repeated LLM calls at scale)
 
 **Trade-offs**:
-- ChromaDB requires operational overhead for production
-- Pinecone has cost implications for large-scale usage
+- ✅ Simplicity: No embedding pipeline, no vector DB operations
+- ✅ Speed to market: 30% faster development timeline
+- ❌ Latency: 15 seconds vs 5 seconds for embedding approach
+- ❌ Scalability ceiling: 128K tokens (~100K words) vs unlimited with vector DB
 
-### LLM Decision Layer
+### 4 Agent Modes Design
 
-**Decision**: Always use LLM to validate outlier/connection relevance before commenting.
+**Decision**: Implement 4 distinct agent modes (outlier, summary, connect, question) instead of single generic facilitator.
 
 **Rationale**:
-- Prevents false positives and irrelevant comments
-- Provides natural language explanation in comments
-- Adapts to document context and topic
-- Reduces facilitator intervention burden
+- **Clear value propositions**: Each mode solves specific facilitation need
+- **Mode-specific prompts**: Optimized LLM instructions per analysis type
+- **Researcher control**: Select facilitation strategy based on session goals
+- **Measurable outcomes**: Track approval rates per mode to validate effectiveness
+
+**Mode Selection Strategy**:
+- Outlier mode: Encourage unique perspectives, surface minority views
+- Summary mode: Help researchers track discussion themes, identify consensus
+- Connect mode: Foster collaboration by linking similar contributors
+- Question mode: Deepen thinking through Socratic questioning
 
 **Trade-offs**:
-- Adds 5-10 seconds latency per decision
-- API costs ($0.01-0.05 per decision)
-- Requires fallback logic for API failures
+- ✅ Focused analysis: Each mode optimized for specific task
+- ✅ Research insights: Per-mode approval rates reveal which interventions work
+- ❌ Researcher overhead: Must manually switch modes (vs auto-detection)
+- ❌ Implementation complexity: 4 prompt templates vs 1 generic
+
+### Context File Import
+
+**Decision**: Allow researchers to import .txt files to augment LLM knowledge.
+
+**Rationale**:
+- **Domain expertise**: Import research paper abstracts, project guidelines
+- **Session continuity**: Import meeting notes from previous sessions
+- **Flexibility**: Researchers control what context is relevant
+- **Simple implementation**: Prepend text to LLM prompts, no complex integration
+
+**Trade-offs**:
+- ✅ Powerful capability: Context-aware analysis without training custom models
+- ✅ Researcher autonomy: Full control over background knowledge
+- ❌ Token usage: Context files consume limited 128K window
+- ❌ Manual process: Researcher must curate and import files
 
 ### Wizard-of-Oz Approach (Human-in-the-Loop)
 
@@ -591,42 +662,47 @@ A semi-automated research tool that:
 - May miss highlighting time-sensitive outliers
 - Requires queue management for pending comments
 
-## Acceptance Criteria Summary
+## Acceptance Criteria Summary (v2.0 Simplified)
 
 1. System successfully monitors Google Doc changes with <3 minute latency
-2. Embedding generation achieves >95% success rate for text segments
-3. Outlier detection accuracy >85% (validated against researcher judgment)
-4. AI suggestion generation latency <3 minutes from contribution
-5. Terminal interface displays suggestions within 5 seconds of analysis completion
-6. Researcher approval rate >60% for AI-generated suggestions
-7. Zero duplicate comments posted to same text position
-8. System uptime >99.5% during research sessions
-9. API costs <$5 per 1000 contributions analyzed (using SBERT + Gemini LLM)
-10. Research data logging captures 100% of decisions with timestamps and rationale
-11. Terminal interface command response time <500ms
+2. LLM analysis completes in <15 seconds (95th percentile)
+3. Terminal interface displays suggestions within 5 seconds of LLM response
+4. Researcher approval rate >60% overall (mode-specific targets):
+   - Outlier mode: >60%
+   - Summary mode: >70%
+   - Connect mode: >50%
+   - Question mode: >65%
+5. Zero duplicate comments posted to same text position
+6. System uptime >99.5% during research sessions
+7. API costs <$10 per 1000 contributions analyzed (LLM-only approach)
+8. Research data logging captures 100% of decisions with mode, timestamps, rationale
+9. Terminal interface command response time <500ms
+10. Context file import success rate: 100% for valid .txt files
+11. Mode switching works correctly across all 4 agent modes
 12. Qualitative feedback from participants confirms AI interventions add value
 
-## Open Questions (Research Phase)
+## Open Questions (Research Phase - v2.0)
 
-1. What is the optimal approval threshold for researchers? (>60%? >70%?)
-2. How do researchers customize prompts in practice? (What strategies emerge?)
-3. Does semantic analysis + LLM intervention actually improve collaboration quality?
-4. What is the false positive rate in real collaboration sessions?
-5. Do participants find AI comments helpful or annoying?
-6. Should the system auto-suggest prompt customizations based on document type?
-7. What is the optimal similarity threshold for outlier detection across different collaboration contexts?
-8. How long does it take researchers to make approve/reject decisions on average?
-9. Would researchers benefit from batch approval (approve multiple suggestions at once)?
-10. Should the system provide terminal UI themes or color coding for different analysis types?
+1. Which agent mode is most effective? (Outlier, Summary, Connect, or Question?)
+2. Do researchers switch modes frequently or stick to one preferred mode?
+3. How much do imported context files improve analysis quality?
+4. What is the optimal approval threshold for each mode? (Currently: 50-70%)
+5. Does LLM-only analysis match embedding-based accuracy for outlier detection?
+6. Do participants find AI comments helpful or annoying (qualitative feedback)?
+7. How long does it take researchers to make approve/reject decisions on average?
+8. Would researchers benefit from batch approval (approve multiple suggestions at once)?
+9. What is the false positive rate per mode in real collaboration sessions?
+10. Should the system auto-detect optimal mode based on document type?
 
-## Future Research Questions (Post-Validation)
+## Future Research Questions (Post-Validation - v2.0)
 
-If Wizard-of-Oz testing validates the approach:
-1. Should the system provide automated comment posting with confidence >0.9?
-2. How to design web dashboard for remote multi-researcher collaboration?
-3. Should the system learn from researcher feedback to improve LLM prompts?
+If Wizard-of-Oz testing validates the LLM-only approach:
+1. Should the system provide automated comment posting with confidence >0.9 for high-approval modes?
+2. When to add embeddings/vector DB for scale? (>1000 contributions? >10,000?)
+3. Should the system learn from researcher feedback to refine mode-specific prompts?
 4. What is the optimal batch interval for different collaboration intensities?
-5. Should the system support multiple embedding models simultaneously for ensemble analysis?
+5. Should the system support hybrid mode (combine outlier + question, or summary + connect)?
+6. How to design multi-researcher collaboration (multiple terminals, shared context)?
 
 ## References
 
