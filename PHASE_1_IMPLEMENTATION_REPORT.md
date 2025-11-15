@@ -221,21 +221,22 @@ These are minor test infrastructure issues that don't affect core functionality.
 - ✅ AES-256 encrypted token storage
 - ✅ Token expiration tracking
 
-#### Document Monitoring
+#### Document Monitoring (Passive Detection)
 - ✅ Document registration system
-- ✅ Google Docs API integration
-- ✅ Revision ID tracking
-- ✅ Change detection logic
+- ✅ Google Docs API integration via Drive API push notifications
+- ✅ Revision ID tracking for change detection
 - ✅ Duplicate processing prevention
-- ✅ Batch processing queuing
+- ✅ Change queuing (stores changes, does NOT trigger analysis)
+- ✅ Timestamp tracking for changes
 
-#### Dual-Mode Scheduler
-- ✅ On-demand analysis trigger
-- ✅ Automatic interval scheduling (30s, 60s, 120s)
+#### Dual-Mode Scheduler (Active Timing Control)
+- ✅ Controls WHEN to analyze changes (manual or automatic)
+- ✅ On-demand analysis trigger (researcher-controlled via "analyze" command)
+- ✅ Automatic interval scheduling (30s, 60s, 120s - optional)
 - ✅ Mode persistence across sessions
 - ✅ Debouncing (prevents duplicate triggers within 10s)
 - ✅ Progress indicators and countdowns
-- ✅ Trigger source tracking
+- ✅ Trigger source tracking (manual vs automatic)
 
 #### Terminal UI
 - ✅ 4 agent modes (outlier, summary, connect, question)
@@ -299,14 +300,16 @@ httpx==0.26.0                          # HTTP client
 - Automatic refresh on expiration
 - Refresh token persistence
 
-✅ **Document Monitoring**
-- Document changes trigger batch processing within 90-120 seconds
+✅ **Document Monitoring** (Passive Detection)
+- Detects document changes immediately via Google Drive API push notifications
+- Tracks revision IDs to prevent duplicate processing
+- Stores changes in queue (does NOT trigger analysis automatically)
 - System correctly fetches only new changes (no duplicates)
-- Revision tracking prevents reprocessing
 
-✅ **Dual-Mode Scheduling**
-- Default on-demand (manual) mode
-- Switchable to automatic with 30s, 60s, or 120s intervals
+✅ **Dual-Mode Scheduling** (Active Timing Control)
+- Controls WHEN to analyze queued changes from DocumentMonitor
+- Manual mode (default): Researcher triggers analysis via "analyze" command
+- Automatic mode (optional): Analyzes every 30s, 60s, or 120s
 - Mode persistence across session pause/resume
 - Debouncing prevents duplicate triggers within 10s window
 
@@ -353,11 +356,15 @@ httpx==0.26.0                          # HTTP client
 
 ### Fully Functional Components
 1. OAuth 2.0 authentication flow
-2. Dual-mode scheduler (manual + automatic)
-3. Terminal UI with command interface
-4. Context file import and management
-5. Document registration and revision tracking
+2. **Document Monitoring** (passive detection) - detects changes, queues them
+3. **Dual-Mode Scheduler** (active timing) - controls WHEN to analyze queued changes
+4. Terminal UI with command interface
+5. Context file import and management
 6. Error handling and logging framework
+
+**Note**: DocumentMonitor and Scheduler are properly separated:
+- DocumentMonitor: Passive - detects and queues changes (always running)
+- Scheduler: Active - decides when to trigger LLM analysis (manual or automatic)
 
 ### Production-Ready
 - ✅ Token encryption

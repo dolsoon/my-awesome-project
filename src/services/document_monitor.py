@@ -17,7 +17,6 @@ class DocumentMonitor:
         self.watched_documents: Dict[str, Dict] = {}
         self.revision_history: Dict[str, List[str]] = {}
         self.last_change_timestamp: Dict[str, float] = {}
-        self.batch_interval: int = 100
 
     def register_document(self, doc_id: str) -> None:
         """Register a document for monitoring"""
@@ -86,7 +85,3 @@ class DocumentMonitor:
     def get_last_change_timestamp(self, doc_id: str) -> Optional[float]:
         """Get timestamp of last change"""
         return self.last_change_timestamp.get(doc_id)
-
-    def set_batch_interval(self, interval_seconds: int) -> None:
-        """Set batch processing interval"""
-        self.batch_interval = interval_seconds
