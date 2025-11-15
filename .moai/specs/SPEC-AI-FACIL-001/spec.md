@@ -130,7 +130,17 @@ An LLM-powered research tool with 4 selectable agent modes:
 
 **R1.6**: IF the Google Docs API returns rate limit errors, the system SHALL implement exponential backoff with maximum retry of 3 attempts.
 
-**R1.7**: The system SHALL log all document access events with timestamps, user IDs, and change summaries.
+**R1.7**: The system SHALL support two operation modes:
+- **On-Demand Mode** (default): Researcher manually triggers analysis via terminal command
+- **Automatic Mode**: Batch processing at configurable intervals (30s, 60s, or 120s)
+
+**R1.8**: The researcher SHALL be able to switch modes during session via terminal commands:
+- `mode auto 30` - Enable automatic analysis every 30 seconds
+- `mode auto 60` - Enable automatic analysis every 60 seconds
+- `mode auto 120` - Enable automatic analysis every 120 seconds
+- `mode manual` - Disable automatic analysis, use on-demand only
+
+**R1.9**: The system SHALL log all document access events with timestamps, user IDs, and change summaries.
 
 #### R2: LLM-Based Analysis with 4 Agent Modes
 
@@ -287,11 +297,34 @@ An LLM-powered research tool with 4 selectable agent modes:
 - Average time to decision
 - Imported context files count and total size
 
+**R6.8**: The terminal SHALL support on-demand analysis commands:
+- `analyze` - Analyze all new contributions since last check (any mode)
+- `analyze outlier` - Run outlier detection only
+- `analyze summary` - Generate summary only
+- `analyze connect` - Find connections only
+- `analyze question` - Generate questions only
+
+**R6.9**: WHEN researcher triggers on-demand analysis, the system SHALL:
+- Show "Analyzing..." indicator
+- Execute analysis within 15 seconds
+- Display results in terminal
+- Present approval prompt if suggestion generated
+- Update last-analyzed timestamp
+
+**R6.10**: WHEN in automatic mode, the terminal SHALL display:
+- Current interval setting: `[AUTO: 60s]`
+- Time until next automatic analysis: `[Next analysis in 42s]`
+- Option to trigger immediate analysis: `analyze` command
+
+**R6.11**: The terminal SHALL display operation mode prominently alongside agent mode:
+- `[MODE: Outlier Detection | AUTO: 60s]` (automatic mode)
+- `[MODE: Summary | MANUAL]` (on-demand mode)
+
 ### Specifications (Non-Functional Requirements)
 
 #### S1: Performance
 
-**S1.1**: The system SHALL process each batch cycle (document fetch → LLM analysis → comment) in <60 seconds (95th percentile).
+**S1.1**: The system SHALL process each batch cycle (document fetch → LLM analysis → comment) in <60 seconds (95th percentile) for automatic mode, OR provide on-demand analysis response time <15 seconds (95th percentile) for manual mode.
 
 **S1.2**: The system SHALL handle documents up to 50,000 words (approximately 65,000 tokens) without performance degradation.
 
@@ -662,6 +695,42 @@ An LLM-powered research tool with 4 selectable agent modes:
 - May miss highlighting time-sensitive outliers
 - Requires queue management for pending comments
 
+### On-Demand Analysis with Configurable Intervals
+
+**Decision**: Support both on-demand (manual) and automatic (configurable interval) operation modes.
+
+**Rationale**:
+- **Live brainstorming sessions** (5-10 people): Fixed 90-120s intervals are too slow for real-time outlier detection
+- **Researcher control**: Manual trigger allows immediate response to outlier ideas
+- **Flexibility**: Configurable intervals (30s, 60s, 120s) adapt to session intensity
+- **Hybrid approach**: Best of both worlds - automatic monitoring + manual override capability
+
+**Mode Options**:
+- **On-Demand (default)**: Researcher triggers `analyze` command manually when needed
+- **Automatic (30s)**: High-intensity sessions, rapid idea generation
+- **Automatic (60s)**: Balanced sessions, moderate activity
+- **Automatic (120s)**: Low-intensity sessions, thoughtful discussion
+
+**Configuration Example**:
+```yaml
+operation_mode:
+  default: "manual"  # Start in on-demand mode
+  allowed_intervals: [30, 60, 120]  # Configurable intervals (seconds)
+
+analysis:
+  debounce_window: 10  # seconds, prevent duplicate manual triggers
+
+terminal:
+  show_countdown: true  # Show time until next auto analysis
+  show_mode: true  # Display current mode in header
+```
+
+**Trade-offs**:
+- ✅ Real-time responsiveness: On-demand analysis completes within 15 seconds
+- ✅ Session adaptability: Adjust interval based on collaboration intensity
+- ❌ Researcher overhead: Manual mode requires active monitoring
+- ❌ Implementation complexity: Dual-mode scheduler vs single batch scheduler
+
 ## Acceptance Criteria Summary (v2.0 Simplified)
 
 1. System successfully monitors Google Doc changes with <3 minute latency
@@ -679,7 +748,11 @@ An LLM-powered research tool with 4 selectable agent modes:
 9. Terminal interface command response time <500ms
 10. Context file import success rate: 100% for valid .txt files
 11. Mode switching works correctly across all 4 agent modes
-12. Qualitative feedback from participants confirms AI interventions add value
+12. On-demand analysis response time <15 seconds (95th percentile)
+13. Mode switching latency <500ms
+14. Debouncing prevents duplicate analysis: 100%
+15. Interval persistence across session pause/resume: 100%
+16. Qualitative feedback from participants confirms AI interventions add value
 
 ## Open Questions (Research Phase - v2.0)
 

@@ -61,6 +61,10 @@ Before production release, the system MUST meet:
 10. **System Uptime**: >99.5%
 11. **API Costs**: <$10 per 1000 contributions
 12. **Research Data Logging**: 100% of decisions captured
+13. **On-Demand Analysis Response**: <15 seconds (95th percentile)
+14. **Mode Switching Latency**: <500ms
+15. **Debouncing Prevention**: 100% duplicate analysis prevention within 10s window
+16. **Interval Persistence**: 100% mode preservation across session pause/resume
 
 ---
 
@@ -195,6 +199,121 @@ pytest tests/integration/test_docs_api.py::test_fetch_incremental_changes
 **Verification**:
 ```bash
 pytest tests/test_api_error_handling.py::test_rate_limit_backoff
+```
+
+---
+
+### AC-1.7: On-Demand Analysis Trigger
+
+**Given** researcher is monitoring document in manual mode
+**When** new contributions are detected
+**And** researcher runs `analyze` command
+**Then** system analyzes all new contributions immediately
+**And** displays results within 15 seconds
+**And** updates last-analyzed timestamp
+
+**Test Data**:
+- 3 new contributions since last analysis
+- Manual mode active
+- Command: `analyze`
+
+**Verification**:
+```bash
+pytest tests/test_on_demand_analysis.py::test_manual_trigger
+```
+
+---
+
+### AC-1.8: Mode Switching - Auto to Manual
+
+**Given** system is in automatic mode (60s interval)
+**When** researcher runs `mode manual`
+**Then** automatic batch processing stops
+**And** terminal displays `[MANUAL]`
+**And** only on-demand `analyze` commands trigger analysis
+
+**Test Data**:
+- Initial mode: `auto 60`
+- Switch command: `mode manual`
+
+**Verification**:
+```bash
+pytest tests/test_mode_switching.py::test_auto_to_manual
+```
+
+---
+
+### AC-1.9: Mode Switching - Manual to Auto
+
+**Given** system is in manual mode
+**When** researcher runs `mode auto 30`
+**Then** automatic batch processing starts with 30s interval
+**And** terminal displays `[AUTO: 30s]` and countdown
+**And** analysis triggers automatically every 30 seconds
+
+**Test Data**:
+- Initial mode: `manual`
+- Switch command: `mode auto 30`
+
+**Verification**:
+```bash
+pytest tests/test_mode_switching.py::test_manual_to_auto
+```
+
+---
+
+### AC-1.10: Configurable Interval Persistence
+
+**Given** researcher sets `mode auto 60`
+**When** the session is paused and resumed
+**Then** system remembers 60s interval setting
+**And** continues automatic processing with same interval
+
+**Test Data**:
+- Set interval: 60s
+- Pause session, resume after 5 minutes
+
+**Verification**:
+```bash
+pytest tests/test_mode_persistence.py::test_interval_persistence
+```
+
+---
+
+### AC-1.11: Debouncing Manual Analysis
+
+**Given** researcher manually triggers `analyze`
+**When** researcher triggers `analyze` again within 10 seconds
+**Then** system displays "Analysis in progress, please wait"
+**And** does not start duplicate analysis
+**And** completes first analysis before accepting new trigger
+
+**Test Data**:
+- First trigger: `analyze` at t=0
+- Second trigger: `analyze` at t=5 (within 10s)
+
+**Verification**:
+```bash
+pytest tests/test_on_demand_analysis.py::test_debouncing
+```
+
+---
+
+### AC-1.12: Mode-Specific On-Demand Analysis
+
+**Given** researcher wants to run specific analysis mode
+**When** researcher runs `analyze summary`
+**Then** system runs ONLY summary mode analysis
+**And** does not run outlier/connect/question modes
+**And** displays summary results only
+
+**Test Data**:
+- Command: `analyze summary`
+- 10 new contributions with 3 distinct themes
+
+**Verification**:
+```bash
+pytest tests/test_on_demand_analysis.py::test_mode_specific_trigger
 ```
 
 ---

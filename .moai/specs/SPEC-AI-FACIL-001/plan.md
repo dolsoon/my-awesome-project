@@ -94,7 +94,24 @@ This implementation plan outlines the **simplified 3-phase approach** to buildin
    - `list context` and `remove <file>` commands
    - Token usage tracking and warnings
 
-10. Implement basic logging with structlog
+10. Implement operation mode system:
+    - `mode auto [30|60|120]` - Set automatic batch interval
+    - `mode manual` - Disable automatic processing
+    - Store mode preference in session state
+    - Display current mode in terminal header
+
+11. Implement on-demand analysis commands:
+    - `analyze` - Trigger analysis of all new contributions
+    - `analyze [mode]` - Trigger specific agent mode analysis
+    - Debouncing: Prevent duplicate analysis within 10 seconds
+    - Show "Analyzing..." progress indicator
+
+12. Create dual-mode scheduler:
+    - Automatic mode: Celery beat with configurable interval
+    - Manual mode: Direct analysis trigger via command
+    - Shared analysis pipeline for both modes
+
+13. Implement basic logging with structlog
 
 **Acceptance Criteria**:
 - OAuth flow successfully authenticates and stores tokens
@@ -148,35 +165,40 @@ This implementation plan outlines the **simplified 3-phase approach** to buildin
    - Always preserve imported context files
    - Warning display when approaching token limits
 
-5. Create Researcher Approval Workflow:
+5. Implement mode-aware analysis:
+   - Check if triggered manually or automatically
+   - Log trigger source (manual command vs auto batch)
+   - Same analysis logic regardless of trigger source
+
+6. Create Researcher Approval Workflow:
    - Display LLM analysis results in terminal (mode, suggestion, confidence, reasoning)
    - Interactive prompt: "Post this comment? (y/n/e)"
    - (y) Post as-is → Comment Posting Service
    - (n) Reject and log → Research Data Logger
    - (e) Edit mode → Inline text editor → Post edited version
 
-6. Build Comment Posting Service:
+7. Build Comment Posting Service:
    - Integrate Google Docs API `documents.batchUpdate` with `createComment`
    - Format comments with mode attribution: `[AI Facilitator - {Mode}] {comment_text}`
    - Include metadata: timestamp, mode, confidence score
    - Position mapping for comment anchoring
 
-7. Implement rate limiting:
+8. Implement rate limiting:
    - Maximum 1 comment per 60 seconds per document
    - Pause commenting when ≥5 unresolved AI comments exist
    - Queue pending comments with priority ordering
 
-8. Add deduplication:
+9. Add deduplication:
    - Check for existing comments at same text position
    - Compare comment text similarity to prevent near-duplicates
    - Track posted comments in database with document + position hash
 
-9. Create Research Data Logger:
-   - Structured logging: decision_type, mode, original_suggestion, final_comment, timestamp, researcher_id
-   - CSV export for quantitative analysis (approval rates, timing)
-   - JSON export for qualitative analysis (text comparisons, patterns)
+10. Create Research Data Logger:
+    - Structured logging: decision_type, mode, original_suggestion, final_comment, timestamp, researcher_id
+    - CSV export for quantitative analysis (approval rates, timing)
+    - JSON export for qualitative analysis (text comparisons, patterns)
 
-10. Implement retry mechanisms:
+11. Implement retry mechanisms:
     - Retry comment posting once after 5 seconds on API error
     - Log failures for manual review
     - Persist failed comments to retry queue
