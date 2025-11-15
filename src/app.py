@@ -310,10 +310,19 @@ class AIFacilitatorApp:
                 # Generate comment suggestion
                 suggestion = self._generate_comment_suggestion(result, mode)
 
-                # Get researcher approval
-                decision = self.approval_workflow.get_user_decision(suggestion)
+                # Display suggestion to researcher
+                print()
+                print("=" * 70)
+                print("📊 Suggested Comment:")
+                print("─" * 70)
+                print(suggestion["comment_text"])
+                print("─" * 70)
+                print()
 
-                if decision == 'y':
+                # Get researcher decision
+                decision_input = input("Post this comment? (y/n/e): ").strip().lower()
+
+                if decision_input == 'y':
                     # Post comment
                     self.comment_poster.post_comment(
                         doc_id=doc_id,
@@ -323,15 +332,17 @@ class AIFacilitatorApp:
                     print("✅ Comment posted successfully")
 
                     # Log decision
-                    self.approval_workflow.log_decision(
+                    self.approval_workflow.process_decision(
                         suggestion=suggestion,
-                        decision="approved",
-                        mode=mode
+                        decision_type="approve",
+                        researcher_id="researcher"
                     )
 
-                elif decision == 'e':
+                elif decision_input == 'e':
                     # Edit comment
-                    print("Enter edited comment (press Ctrl+D when done):")
+                    print()
+                    print("Enter edited comment (press Ctrl+D or Ctrl+Z when done):")
+                    print("─" * 70)
                     lines = []
                     try:
                         while True:
@@ -342,29 +353,35 @@ class AIFacilitatorApp:
 
                     edited_text = "\n".join(lines)
 
-                    # Post edited comment
-                    self.comment_poster.post_comment(
-                        doc_id=doc_id,
-                        comment_text=edited_text,
-                        position=0
-                    )
-                    print("✅ Edited comment posted successfully")
+                    if edited_text.strip():
+                        # Post edited comment
+                        self.comment_poster.post_comment(
+                            doc_id=doc_id,
+                            comment_text=edited_text,
+                            position=0
+                        )
+                        print()
+                        print("✅ Edited comment posted successfully")
 
-                    # Log decision
-                    self.approval_workflow.log_decision(
-                        suggestion=suggestion,
-                        decision="edited",
-                        mode=mode
-                    )
+                        # Log decision
+                        self.approval_workflow.process_decision(
+                            suggestion=suggestion,
+                            decision_type="edit",
+                            edited_text=edited_text,
+                            researcher_id="researcher"
+                        )
+                    else:
+                        print()
+                        print("❌ Empty comment, not posted")
 
                 else:
                     print("❌ Comment rejected")
 
                     # Log decision
-                    self.approval_workflow.log_decision(
+                    self.approval_workflow.process_decision(
                         suggestion=suggestion,
-                        decision="rejected",
-                        mode=mode
+                        decision_type="reject",
+                        researcher_id="researcher"
                     )
 
             else:
