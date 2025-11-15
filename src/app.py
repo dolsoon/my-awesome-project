@@ -335,8 +335,10 @@ class AIFacilitatorApp:
 
                     if result.get("success"):
                         print("✅ Comment posted successfully")
+                        print(f"   Comment ID: {result.get('comment_id')}")
                     else:
-                        print(f"⚠️  Comment posting issue: {result.get('message')}")
+                        error_msg = result.get('message') or result.get('error') or 'Unknown error'
+                        print(f"⚠️  Comment posting failed: {error_msg}")
 
                     # Log decision
                     self.approval_workflow.process_decision(
@@ -374,8 +376,10 @@ class AIFacilitatorApp:
                         print()
                         if post_result.get("success"):
                             print("✅ Edited comment posted successfully")
+                            print(f"   Comment ID: {post_result.get('comment_id')}")
                         else:
-                            print(f"⚠️  Comment posting issue: {post_result.get('message')}")
+                            error_msg = post_result.get('message') or post_result.get('error') or 'Unknown error'
+                            print(f"⚠️  Comment posting failed: {error_msg}")
 
                         # Log decision
                         self.approval_workflow.process_decision(
