@@ -130,8 +130,22 @@ class CommentPoster:
                 return {"success": False, "queued": True, "message": "Too many unresolved comments"}
             return {"success": False, "paused": True, "message": "Too many unresolved comments"}
 
+        # Handle text_position: can be None, a string (target text), or a dict (position)
+        text_position = comment.get("text_position")
+        position = None
+
+        if text_position:
+            if isinstance(text_position, str):
+                # LLM provided target text - find its position in document
+                position = self._find_text_position(text_position)
+                if position is None:
+                    # Text not found - post at top as fallback
+                    print(f"   ⚠️  Target text not found in document, posting at top")
+            elif isinstance(text_position, dict):
+                # Already a position dict
+                position = text_position
+
         # Check deduplication
-        position = comment.get("text_position")
         position_hash = self._hash_position(document_id, position)
         if position_hash in self.posted_comments:
             return {"success": False, "duplicate": True, "message": "Comment already posted at this position"}

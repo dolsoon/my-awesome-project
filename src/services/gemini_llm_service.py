@@ -45,9 +45,12 @@ class OutlierPromptTemplate(PromptTemplate):
 
 Instructions:
 - Identify the most unique contribution (outlier)
+- Extract the EXACT TEXT from the document that represents this unique contribution (5-20 words)
 - Rate similarity to other contributions on a scale of 0.0 (unique) to 1.0 (similar)
 - Provide encouragement message for the unique contributor
-- Return JSON: {{"outlier_found": bool, "unique_aspect": str, "similarity_score": float, "confidence": float, "encouragement_message": str}}"""
+- Return JSON: {{"outlier_found": bool, "target_text": str, "unique_aspect": str, "similarity_score": float, "confidence": float, "encouragement_message": str}}
+
+IMPORTANT: The "target_text" must be an exact substring from the contributions above. This will be used to position the comment in the document."""
 
     def _format_contributions(self, document: Dict) -> str:
         """Format contributions for prompt"""
@@ -82,9 +85,12 @@ class SummaryPromptTemplate(PromptTemplate):
 
 Instructions:
 - Identify recurring themes or clusters
+- Extract the EXACT TEXT representing the most prominent theme (5-20 words)
 - Group similar ideas together
 - Summarize main themes and discussion patterns
-- Return JSON: {{"themes": [str], "summary": str, "contributor_count": int, "confidence": float}}"""
+- Return JSON: {{"target_text": str, "themes": [str], "summary": str, "contributor_count": int, "confidence": float}}
+
+IMPORTANT: The "target_text" must be an exact substring from the contributions above. This will be used to position the comment."""
 
     def _format_contributions(self, document: Dict) -> str:
         """Format contributions for prompt"""
@@ -108,9 +114,12 @@ class ConnectPromptTemplate(PromptTemplate):
 
 Instructions:
 - Find pairs of ideas from different authors that are similar or complementary
+- Extract the EXACT TEXT from one of the connected ideas (5-20 words)
 - Do NOT connect ideas from the same author
 - Explain the connection and suggest collaboration
-- Return JSON: {{"connections": [{{"author1": str, "author2": str, "common_theme": str, "connection_message": str}}], "confidence": float}}"""
+- Return JSON: {{"target_text": str, "connections": [{{"author1": str, "author2": str, "common_theme": str, "connection_message": str}}], "confidence": float}}
+
+IMPORTANT: The "target_text" must be an exact substring from the contributions above. This will be used to position the comment."""
 
     def _format_contributions(self, document: Dict) -> str:
         """Format contributions for prompt"""
@@ -134,9 +143,12 @@ class QuestionPromptTemplate(PromptTemplate):
 
 Instructions:
 - Select a contributor whose ideas could be deepened
+- Extract the EXACT TEXT from their contribution that needs deepening (5-20 words)
 - Ask clarifying questions based on their assumptions
 - Use Socratic method to encourage critical thinking
-- Return JSON: {{"target_author": str, "clarifying_questions": [str], "confidence": float}}"""
+- Return JSON: {{"target_text": str, "target_author": str, "clarifying_questions": [str], "confidence": float}}
+
+IMPORTANT: The "target_text" must be an exact substring from the contributions above. This will be used to position the comment."""
 
     def _format_contributions(self, document: Dict) -> str:
         """Format contributions for prompt"""

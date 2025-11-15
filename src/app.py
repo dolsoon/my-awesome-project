@@ -323,11 +323,18 @@ class AIFacilitatorApp:
                 decision_input = input("Post this comment? (y/n/e): ").strip().lower()
 
                 if decision_input == 'y':
+                    # Extract target text from LLM result (if available)
+                    target_text = result.get("target_text")
+
+                    # Set document text for position finding
+                    if target_text:
+                        self.comment_poster.current_document_text = text
+
                     # Post comment
                     comment_dict = {
                         "document_id": doc_id,
                         "comment_text": suggestion["comment_text"],
-                        "text_position": None,  # Top of document
+                        "text_position": target_text,  # LLM-identified text to highlight
                         "mode": mode,
                         "confidence": result.get("confidence", 0)
                     }
@@ -363,11 +370,18 @@ class AIFacilitatorApp:
                     edited_text = "\n".join(lines)
 
                     if edited_text.strip():
+                        # Extract target text from LLM result (if available)
+                        target_text = result.get("target_text")
+
+                        # Set document text for position finding
+                        if target_text:
+                            self.comment_poster.current_document_text = text
+
                         # Post edited comment
                         comment_dict = {
                             "document_id": doc_id,
                             "comment_text": edited_text,
-                            "text_position": None,
+                            "text_position": target_text,  # LLM-identified text to highlight
                             "mode": mode,
                             "confidence": result.get("confidence", 0)
                         }
