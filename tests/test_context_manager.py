@@ -128,13 +128,25 @@ class TestContextFileManager:
 
     def test_token_limit_warning(self, context_manager, tmp_path):
         """Test warning when approaching 128K token limit"""
-        test_file = tmp_path / "large_context.txt"
-        # Create large content (approximately 100K tokens)
-        test_file.write_text("word " * 20000)
-        context_manager.import_file(str(test_file))
+        # Temporarily increase limits for this test
+        original_max_file = context_manager.MAX_FILE_SIZE
+        original_max_total = context_manager.MAX_TOTAL_SIZE
+        context_manager.MAX_FILE_SIZE = 1000000  # 1MB per file
+        context_manager.MAX_TOTAL_SIZE = 1000000  # 1MB total
 
-        warning = context_manager.check_token_limit_warning()
-        assert warning is not None
+        try:
+            test_file = tmp_path / "large_context.txt"
+            # Create large content (approximately 100K+ tokens)
+            # Each "word " is ~1 token, so 103K words = ~103K tokens
+            test_file.write_text("word " * 103000)
+            result = context_manager.import_file(str(test_file))
+            assert result is True, "File import failed"
+
+            warning = context_manager.check_token_limit_warning()
+            assert warning is not None
+        finally:
+            context_manager.MAX_FILE_SIZE = original_max_file
+            context_manager.MAX_TOTAL_SIZE = original_max_total
 
     def test_clear_all_context_files(self, context_manager, tmp_path):
         """Test clearing all imported context files"""

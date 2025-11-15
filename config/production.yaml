@@ -1,0 +1,151 @@
+"""
+Production Configuration
+SPEC-AI-FACIL-001 Phase 3: Production-grade configuration
+"""
+
+# Service Configuration
+service:
+  name: ai-facilitator-agent
+  version: 1.0.0
+  environment: production
+  debug: false
+
+# Gemini API Configuration
+gemini:
+  api_key: ${GEMINI_API_KEY}
+  model: ${GEMINI_MODEL:gemini-2.5-flash-lite}
+  timeout_seconds: ${GEMINI_TIMEOUT_SECONDS:30}
+  max_tokens: 128000
+  temperature: 0.7
+  max_output_tokens: 2000
+
+  # Retry configuration
+  retry:
+    max_attempts: ${RETRY_MAX_ATTEMPTS:3}
+    initial_delay_ms: ${RETRY_INITIAL_DELAY_MS:1000}
+    max_delay_ms: ${RETRY_MAX_DELAY_MS:10000}
+    multiplier: 2.0
+
+# Google Docs API Configuration
+google_docs:
+  client_id: ${GOOGLE_CLIENT_ID}
+  client_secret: ${GOOGLE_CLIENT_SECRET}
+  redirect_uri: ${GOOGLE_REDIRECT_URI}
+  timeout_seconds: ${DOCS_API_TIMEOUT_SECONDS:10}
+
+  # Rate limiting
+  rate_limit:
+    comments_per_minute: 10
+    seconds_between_comments: ${RATE_LIMIT_SECONDS:60}
+    max_unresolved_comments: ${MAX_UNRESOLVED_COMMENTS:5}
+
+  # Retry configuration
+  retry:
+    max_attempts: ${RETRY_MAX_ATTEMPTS:3}
+    initial_delay_ms: ${RETRY_INITIAL_DELAY_MS:1000}
+    max_delay_ms: ${RETRY_MAX_DELAY_MS:10000}
+
+# Analysis Configuration
+analysis:
+  confidence_threshold: ${CONFIDENCE_THRESHOLD:0.7}
+  max_tokens_per_analysis: ${MAX_TOKENS_PER_ANALYSIS:100000}
+  max_contributions: ${MAX_CONTRIBUTIONS:1000}
+
+  # Timeout for analysis
+  timeout_seconds: 60
+
+  # Modes
+  modes:
+    - name: outlier
+      description: Detect unique contributions
+      weight: 1.0
+    - name: summary
+      description: Summarize discussion themes
+      weight: 1.0
+    - name: connect
+      description: Find connections between ideas
+      weight: 1.0
+    - name: question
+      description: Generate Socratic questions
+      weight: 1.0
+
+# Token Management
+tokens:
+  storage_path: ${TOKEN_STORAGE_PATH:./tokens.json}
+  encryption_key: ${ENCRYPTION_KEY}
+  max_token_limit: 128000
+  warning_threshold: 0.8
+
+# Context Management
+context:
+  config_path: ${CONTEXT_CONFIG_PATH:./context_config.json}
+  max_file_size: 10000
+  max_total_size: 50000
+
+# Monitoring & Observability
+monitoring:
+  enabled: true
+  log_level: ${LOG_LEVEL:INFO}
+
+  # Metrics collection
+  metrics:
+    enabled: true
+    retention_seconds: ${METRICS_RETENTION_SECONDS:3600}
+    export_interval_seconds: 60
+
+  # Health checks
+  health_check:
+    enabled: true
+    interval_seconds: ${HEALTH_CHECK_INTERVAL_SECONDS:300}
+    timeout_seconds: 10
+
+  # Logging
+  logging:
+    format: json
+    level: ${LOG_LEVEL:INFO}
+    file: ./logs/ai-facilitator.log
+    max_size_mb: 100
+    backup_count: 5
+
+# Feature Flags
+features:
+  gemini_api_enabled: ${ENABLE_GEMINI_API:true}
+  docs_posting_enabled: ${ENABLE_DOCS_POSTING:true}
+  auto_analysis_enabled: ${ENABLE_AUTO_ANALYSIS:true}
+  auto_commenting_enabled: true
+  metrics_collection_enabled: true
+  health_checks_enabled: true
+
+# Security
+security:
+  encryption_enabled: true
+  encryption_algorithm: AES-256-GCM
+  token_encryption_enabled: true
+  validate_api_keys: true
+  validate_oauth_tokens: true
+
+  # CORS
+  cors:
+    enabled: true
+    allowed_origins:
+      - https://docs.google.com
+    allowed_methods:
+      - GET
+      - POST
+      - OPTIONS
+
+# Database / Storage
+storage:
+  type: local
+  tokens_path: ${TOKEN_STORAGE_PATH:./tokens.json}
+  logs_path: ./logs
+  cache_path: ./cache
+
+# Deployment
+deployment:
+  port: 8080
+  workers: 4
+  timeout: 30
+  keepalive: 5
+  environment: production
+  debug: false

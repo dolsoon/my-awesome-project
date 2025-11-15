@@ -139,7 +139,10 @@ class ContextFileManager:
     def save_context_list(self) -> None:
         """Save context file list to disk"""
         config = {
-            "files": list(self.imported_files.keys()),
+            "files": {
+                filename: content
+                for filename, content in self.imported_files.items()
+            }
         }
         with open(self.config_path, "w") as f:
             json.dump(config, f)
@@ -149,7 +152,9 @@ class ContextFileManager:
         if os.path.exists(self.config_path):
             try:
                 with open(self.config_path, "r") as f:
-                    _config = json.load(f)
-                # Note: content would need to be loaded from disk separately
+                    config = json.load(f)
+                # Restore imported files from saved config
+                if "files" in config:
+                    self.imported_files = config["files"]
             except Exception:
                 pass

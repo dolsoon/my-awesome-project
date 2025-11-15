@@ -57,6 +57,7 @@ class TestOAuthHandler:
     def test_token_encryption_decryption(self, oauth_handler):
         """Test encrypted storage of OAuth refresh tokens (AES-256)"""
         # Test with encryption enabled
+        from src.auth.oauth_handler import OAuthHandler
         oauth_with_cipher = OAuthHandler(
             client_id="test",
             client_secret="test",

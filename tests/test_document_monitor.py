@@ -54,6 +54,7 @@ class TestDocumentMonitor:
         doc_id = "test-doc-id"
         revision_id = "rev-123"
 
+        monitor.register_document(doc_id)
         monitor.track_revision(doc_id, revision_id)
         assert monitor.get_last_revision(doc_id) == revision_id
 
@@ -61,7 +62,8 @@ class TestDocumentMonitor:
         """Test detection of new changes since last revision"""
         doc_id = "test-doc-id"
 
-        # Set initial revision
+        # Register and set initial revision
+        monitor.register_document(doc_id)
         monitor.track_revision(doc_id, "rev-1")
 
         # New revision should indicate changes
@@ -106,6 +108,7 @@ class TestDocumentMonitor:
         doc_id = "test-doc"
         revision_id = "rev-100"
 
+        monitor.register_document(doc_id)
         monitor.track_revision(doc_id, revision_id)
 
         # Same revision should not be processed again
@@ -130,6 +133,7 @@ class TestDocumentMonitor:
         """Test storing revision history for deduplication"""
         doc_id = "test-doc"
 
+        monitor.register_document(doc_id)
         monitor.track_revision(doc_id, "rev-1")
         monitor.track_revision(doc_id, "rev-2")
         monitor.track_revision(doc_id, "rev-3")
