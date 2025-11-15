@@ -324,12 +324,19 @@ class AIFacilitatorApp:
 
                 if decision_input == 'y':
                     # Post comment
-                    self.comment_poster.post_comment(
-                        doc_id=doc_id,
-                        comment_text=suggestion["comment_text"],
-                        position=0  # Top of document
-                    )
-                    print("✅ Comment posted successfully")
+                    comment_dict = {
+                        "document_id": doc_id,
+                        "comment_text": suggestion["comment_text"],
+                        "text_position": None,  # Top of document
+                        "mode": mode,
+                        "confidence": result.get("confidence", 0)
+                    }
+                    result = self.comment_poster.post_comment(comment_dict)
+
+                    if result.get("success"):
+                        print("✅ Comment posted successfully")
+                    else:
+                        print(f"⚠️  Comment posting issue: {result.get('message')}")
 
                     # Log decision
                     self.approval_workflow.process_decision(
@@ -355,13 +362,20 @@ class AIFacilitatorApp:
 
                     if edited_text.strip():
                         # Post edited comment
-                        self.comment_poster.post_comment(
-                            doc_id=doc_id,
-                            comment_text=edited_text,
-                            position=0
-                        )
+                        comment_dict = {
+                            "document_id": doc_id,
+                            "comment_text": edited_text,
+                            "text_position": None,
+                            "mode": mode,
+                            "confidence": result.get("confidence", 0)
+                        }
+                        post_result = self.comment_poster.post_comment(comment_dict)
+
                         print()
-                        print("✅ Edited comment posted successfully")
+                        if post_result.get("success"):
+                            print("✅ Edited comment posted successfully")
+                        else:
+                            print(f"⚠️  Comment posting issue: {post_result.get('message')}")
 
                         # Log decision
                         self.approval_workflow.process_decision(
