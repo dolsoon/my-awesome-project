@@ -150,3 +150,30 @@ class TerminalUI:
             return f"[{mode_part} | AUTO: {self.scheduler.interval}s]"
         else:
             return f"[{mode_part} | MANUAL]"
+
+
+def main():
+    """Main entry point for terminal interface"""
+    print("AI Facilitator Agent - Terminal Interface")
+    print("=" * 60)
+    print()
+    print("Welcome! This is the terminal interface for the AI Facilitator.")
+    print()
+    print("To run the full application, you need to:")
+    print("1. Set up your .env file with API keys (see .env.example)")
+    print("2. Configure production settings in config/production.yaml")
+    print("3. Run the main application (coming in production deployment)")
+    print()
+    print("For now, this is a demonstration of the module structure.")
+    print()
+    print("Available commands will include:")
+    print("  - analyze [mode]    : Trigger analysis")
+    print("  - mode [type]       : Switch agent mode")
+    print("  - status            : Show current status")
+    print("  - import <file>     : Import context file")
+    print("  - help              : Show all commands")
+    print()
+
+
+if __name__ == "__main__":
+    main()
