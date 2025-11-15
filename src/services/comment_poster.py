@@ -13,9 +13,10 @@ import time
 class CommentPoster:
     """Posts comments to Google Docs with rate limiting and deduplication"""
 
-    def __init__(self, docs_api_client, rate_limit_seconds: int = 60, max_unresolved: int = 5):
+    def __init__(self, docs_api_client, drive_api_client, rate_limit_seconds: int = 60, max_unresolved: int = 5):
         """Initialize CommentPoster"""
         self.docs_api_client = docs_api_client
+        self.drive_api_client = drive_api_client
         self.rate_limit_seconds = rate_limit_seconds
         self.max_unresolved_comments = max_unresolved
         self.last_comment_time: Dict[str, datetime] = {}
@@ -57,50 +58,36 @@ class CommentPoster:
         return None
 
     def _call_docs_api(self, request: Dict[str, Any]) -> Dict[str, Any]:
-        """Call Google Docs API to post comment"""
+        """Call Google Drive API to post comment (comments are Drive API, not Docs API)"""
         document_id = request["document_id"]
         comment_text = request["comment_text"]
         position = request.get("position")
 
-        # Create comment request structure
-        if position is None:
-            # Comment at top of document
-            comment_request = {
-                "createComment": {
-                    "comment": {
-                        "content": comment_text,
-                        "quotedTextRange": {
-                            "startIndex": 1,
-                            "endIndex": 2
-                        }
-                    }
-                }
-            }
-        else:
-            # Position-based comment
-            comment_request = {
-                "createComment": {
-                    "comment": {
-                        "content": comment_text,
-                        "anchor": {
-                            "tabId": "",
-                            "bounds": {
-                                "startIndex": position["index"],
-                                "endIndex": position["index"] + position["length"]
-                            }
-                        }
-                    }
-                }
-            }
+        # Create comment body for Drive API
+        comment_body = {
+            "content": comment_text
+        }
 
-        # Call Google Docs API
-        result = self.docs_api_client.documents().batchUpdate(
-            documentId=document_id,
-            body={"requests": [comment_request]}
+        # Add quoted text range if position is specified
+        if position and isinstance(position, dict):
+            # Position-based comment with text highlighting
+            comment_body["quotedFileContent"] = {
+                "mimeType": "text/plain",
+                "value": self.current_document_text[
+                    position["index"]:position["index"] + position["length"]
+                ]
+            }
+            comment_body["anchor"] = f"r{position['index']}"
+
+        # Call Google Drive API (comments().create())
+        result = self.drive_api_client.comments().create(
+            fileId=document_id,
+            body=comment_body,
+            fields="id,content,quotedFileContent,anchor"
         ).execute()
 
         # Extract comment ID from response
-        comment_id = result.get("replies", [{}])[0].get("createComment", {}).get("commentId")
+        comment_id = result.get("id")
 
         return {
             "commentId": comment_id,

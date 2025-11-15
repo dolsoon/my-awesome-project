@@ -160,8 +160,8 @@ class OAuthHandler:
     def get_required_scopes(self) -> List[str]:
         """Get required OAuth scopes for Drive and Docs APIs"""
         return [
-            "https://www.googleapis.com/auth/drive.readonly",
-            "https://www.googleapis.com/auth/documents",
+            "https://www.googleapis.com/auth/drive",  # Full Drive access (needed for comments)
+            "https://www.googleapis.com/auth/documents",  # Full Docs access
         ]
 
     def validate_token_response(self, token_dict: Dict) -> bool:

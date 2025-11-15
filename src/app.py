@@ -65,7 +65,8 @@ class AIFacilitatorApp:
 
         # Application state
         self.authenticated = False
-        self.google_client = None
+        self.docs_client = None
+        self.drive_client = None
         self.current_mode = "outlier"
 
     def _check_environment(self):
@@ -180,17 +181,19 @@ class AIFacilitatorApp:
             )
 
             # Build Google API clients
-            self.google_client = build('docs', 'v1', credentials=credentials)
+            self.docs_client = build('docs', 'v1', credentials=credentials)
+            self.drive_client = build('drive', 'v3', credentials=credentials)
 
             # Initialize document monitor
             self.document_monitor = DocumentMonitor(
-                google_client=self.google_client,
+                google_client=self.docs_client,
                 oauth_handler=self.oauth_handler
             )
 
             # Initialize comment poster
             self.comment_poster = CommentPoster(
-                docs_api_client=self.google_client,
+                docs_api_client=self.docs_client,
+                drive_api_client=self.drive_client,
                 rate_limit_seconds=60,
                 max_unresolved=5
             )
