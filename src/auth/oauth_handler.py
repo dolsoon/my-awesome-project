@@ -109,12 +109,16 @@ class OAuthHandler:
 
     def encrypt_token(self, token: str) -> str:
         """Encrypt token for storage"""
+        if not token:  # Handle None or empty string
+            return ""
         if not self.cipher:
             return token
         return self.cipher.encrypt(token.encode()).decode()
 
     def decrypt_token(self, encrypted_token: str) -> str:
         """Decrypt stored token"""
+        if not encrypted_token:  # Handle None or empty string
+            return ""
         if not self.cipher:
             return encrypted_token
         return self.cipher.decrypt(encrypted_token.encode()).decode()
