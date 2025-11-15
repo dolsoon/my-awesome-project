@@ -141,6 +141,10 @@ class AIFacilitatorApp:
         # Get authorization code from user
         auth_code = input("Enter authorization code: ").strip()
 
+        # URL decode the code if it contains %2F or other encoded characters
+        from urllib.parse import unquote
+        auth_code = unquote(auth_code)
+
         try:
             # Exchange code for tokens
             tokens = self.oauth_handler.exchange_code_for_token(auth_code)
@@ -186,9 +190,9 @@ class AIFacilitatorApp:
 
             # Initialize comment poster
             self.comment_poster = CommentPoster(
-                google_client=self.google_client,
-                oauth_handler=self.oauth_handler,
-                rate_limit_seconds=60
+                docs_api_client=self.google_client,
+                rate_limit_seconds=60,
+                max_unresolved=5
             )
 
             # Initialize scheduler with analysis service
