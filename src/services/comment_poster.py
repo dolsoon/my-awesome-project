@@ -57,9 +57,55 @@ class CommentPoster:
         return None
 
     def _call_docs_api(self, request: Dict[str, Any]) -> Dict[str, Any]:
-        """Call Google Docs API"""
-        # Will be mocked in tests
-        raise NotImplementedError("Must call actual API or be mocked")
+        """Call Google Docs API to post comment"""
+        document_id = request["document_id"]
+        comment_text = request["comment_text"]
+        position = request.get("position")
+
+        # Create comment request structure
+        if position is None:
+            # Comment at top of document
+            comment_request = {
+                "createComment": {
+                    "comment": {
+                        "content": comment_text,
+                        "quotedTextRange": {
+                            "startIndex": 1,
+                            "endIndex": 2
+                        }
+                    }
+                }
+            }
+        else:
+            # Position-based comment
+            comment_request = {
+                "createComment": {
+                    "comment": {
+                        "content": comment_text,
+                        "anchor": {
+                            "tabId": "",
+                            "bounds": {
+                                "startIndex": position["index"],
+                                "endIndex": position["index"] + position["length"]
+                            }
+                        }
+                    }
+                }
+            }
+
+        # Call Google Docs API
+        result = self.docs_api_client.documents().batchUpdate(
+            documentId=document_id,
+            body={"requests": [comment_request]}
+        ).execute()
+
+        # Extract comment ID from response
+        comment_id = result.get("replies", [{}])[0].get("createComment", {}).get("commentId")
+
+        return {
+            "commentId": comment_id,
+            "success": True
+        }
 
     def post_comment(
         self,
