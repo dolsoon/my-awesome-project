@@ -63,18 +63,27 @@ class CommentPoster:
         comment_text = request["comment_text"]
         position = request.get("position")
 
-        # Determine insertion position
+        # Determine insertion position and extract context
+        target_text_quote = None
         if position and isinstance(position, dict):
             # Insert after the target text
             insert_index = position["index"] + position["length"]
+            # Extract the target text for context
+            if self.current_document_text:
+                target_text_quote = self.current_document_text[
+                    position["index"]:position["index"] + position["length"]
+                ].strip()
         else:
             # Insert at the end of the document
             # First, get document to find the end index
             doc = self.docs_api_client.documents().get(documentId=document_id).execute()
             insert_index = doc.get("body", {}).get("content", [{}])[-1].get("endIndex", 1) - 1
 
-        # Format the AI message
-        ai_message = f"\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🤖 AI Facilitator\n{comment_text}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        # Format the AI message with context
+        if target_text_quote:
+            ai_message = f"\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🤖 AI Facilitator\n📍 Regarding: \"{target_text_quote}\"\n\n{comment_text}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        else:
+            ai_message = f"\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🤖 AI Facilitator\n\n{comment_text}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
 
         message_length = len(ai_message)
 
@@ -87,7 +96,7 @@ class CommentPoster:
                     "text": ai_message
                 }
             },
-            # 2. Style the text (light blue background, italic)
+            # 2. Style the entire block (light blue background, italic)
             {
                 "updateTextStyle": {
                     "range": {
@@ -114,6 +123,33 @@ class CommentPoster:
                 }
             }
         ]
+
+        # If we have a quoted context, make it bold for emphasis
+        if target_text_quote:
+            # Find the position of the quoted text in the ai_message
+            quote_start = ai_message.find(f'"{target_text_quote}"')
+            if quote_start != -1:
+                requests.append({
+                    "updateTextStyle": {
+                        "range": {
+                            "startIndex": insert_index + quote_start,
+                            "endIndex": insert_index + quote_start + len(target_text_quote) + 2  # +2 for quotes
+                        },
+                        "textStyle": {
+                            "bold": True,
+                            "foregroundColor": {
+                                "color": {
+                                    "rgbColor": {
+                                        "red": 0.2,
+                                        "green": 0.3,
+                                        "blue": 0.6
+                                    }
+                                }
+                            }
+                        },
+                        "fields": "bold,foregroundColor"
+                    }
+                })
 
         # Call Google Docs API
         result = self.docs_api_client.documents().batchUpdate(
