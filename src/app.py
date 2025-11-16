@@ -11,6 +11,8 @@ import json
 from typing import Optional, Dict, List
 from pathlib import Path
 from dotenv import load_dotenv
+from prompt_toolkit.shortcuts import radiolist_dialog
+from prompt_toolkit.styles import Style
 
 # Import all Phase 1-3 services
 from src.auth.oauth_handler import OAuthHandler
@@ -164,6 +166,29 @@ class AIFacilitatorApp:
         except Exception as e:
             print(f"❌ Authentication failed: {e}")
             sys.exit(1)
+
+    def _get_approval_decision(self) -> str:
+        """Interactive menu for approval decision using arrow keys"""
+        custom_style = Style.from_dict({
+            'dialog': 'bg:#1e1e1e',
+            'dialog.body': 'bg:#1e1e1e #ffffff',
+            'radio-list': 'bg:#1e1e1e',
+            'radio-checked': 'bg:#00aa00 #ffffff bold',
+            'radio': 'bg:#1e1e1e #ffffff',
+        })
+
+        result = radiolist_dialog(
+            title="📋 Approval Decision",
+            text="Use arrow keys to select, Enter to confirm:",
+            values=[
+                ('y', '✅ Approve - Post this comment'),
+                ('e', '✏️  Edit - Modify comment before posting'),
+                ('n', '❌ Reject - Skip this comment'),
+            ],
+            style=custom_style
+        ).run()
+
+        return result if result else 'n'
 
     def _initialize_google_services(self):
         """Initialize Google API services after authentication"""
@@ -334,8 +359,8 @@ class AIFacilitatorApp:
                 print("─" * 70)
                 print()
 
-                # Get researcher decision
-                decision_input = input("Post this comment? (y/n/e): ").strip().lower()
+                # Get researcher decision (interactive menu)
+                decision_input = self._get_approval_decision()
 
                 if decision_input == 'y':
                     # Extract target text from LLM result (if available)
