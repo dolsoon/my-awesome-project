@@ -30,13 +30,9 @@ class CommentPoster:
         self.current_document_structure: Optional[Dict] = None  # Store structured content
 
     def format_comment(self, comment: Dict[str, Any]) -> str:
-        """Format comment with mode attribution and metadata"""
-        mode = comment.get("mode", "").upper()
-        confidence = comment.get("confidence", 0)
-        comment_text = comment.get("comment_text", "")
-        timestamp = datetime.now().isoformat()
-
-        return f"[AI Facilitator - {mode}] {comment_text}\n(Confidence: {confidence:.0%}, Posted: {timestamp})"
+        """Format comment (just return the text, no metadata)"""
+        # Return comment text directly without metadata
+        return comment.get("comment_text", "")
 
     def can_post_comment(self, document_id: str) -> bool:
         """Check if comment can be posted (rate limiting)"""
@@ -186,9 +182,9 @@ class CommentPoster:
         document_id = request["document_id"]
         comment_text = request["comment_text"]
         position = request.get("position")
+        target_text = request.get("target_text")  # Original target text from LLM
 
-        # Determine insertion position and extract context
-        target_text_quote = None
+        # Determine insertion position
         if position and isinstance(position, dict):
             # Find the end of the paragraph containing the target text
             target_end_index = position["index"] + position["length"]
@@ -196,24 +192,26 @@ class CommentPoster:
             # Find next paragraph break (newline) after target text
             insert_index = self._find_paragraph_end(target_end_index)
             print(f"   📍 Inserting after paragraph at index {insert_index}")
-
-            # Extract the target text for context display
-            if self.current_document_text:
-                target_text_quote = self.current_document_text[
-                    position["index"]:position["index"] + position["length"]
-                ].strip()
         else:
             # Fallback: Insert at top when position not found
             insert_index = 1
             print(f"   ⚠️  Position not found, inserting at top")
 
         # Format the AI message with context (Jaemin style with bullet points)
-        if target_text_quote:
-            # Extract first 30 chars of quote for compact context
-            quote_preview = target_text_quote[:30] + "..." if len(target_text_quote) > 30 else target_text_quote
-            ai_message = f"\n\nJaemin: • Re: \"{quote_preview}\" — {comment_text}\n\n"
+        if target_text:
+            # Extract first 40 chars of quote for context (preserve word boundaries)
+            if len(target_text) > 40:
+                # Find last space within 40 chars to avoid cutting words
+                preview_cutoff = target_text[:40].rfind(' ')
+                if preview_cutoff == -1:
+                    preview_cutoff = 40
+                quote_preview = target_text[:preview_cutoff] + "..."
+            else:
+                quote_preview = target_text
+
+            ai_message = f"\n\n• Jaemin: Re: \"{quote_preview}\" — {comment_text}\n\n"
         else:
-            ai_message = f"\n\nJaemin: • {comment_text}\n\n"
+            ai_message = f"\n\n• Jaemin: {comment_text}\n\n"
 
         message_length = len(ai_message)
 
@@ -319,10 +317,12 @@ class CommentPoster:
         # Handle text_position: can be None, a string (target text), or a dict (position)
         text_position = comment.get("text_position")
         position = None
+        target_text = None  # Store original target text for quote
 
         if text_position:
             if isinstance(text_position, str):
                 # LLM provided target text - find its position in document
+                target_text = text_position  # Store original target text
                 position = self._find_text_position(text_position)
                 if position is None:
                     # Text not found - post at top as fallback
@@ -344,7 +344,8 @@ class CommentPoster:
             result = self._call_docs_api({
                 "document_id": document_id,
                 "comment_text": formatted_comment,
-                "position": position
+                "position": position,
+                "target_text": target_text  # Pass original target text for accurate quote
             })
 
             # Track posted comment
