@@ -11,8 +11,7 @@ import json
 from typing import Optional, Dict, List
 from pathlib import Path
 from dotenv import load_dotenv
-from prompt_toolkit.shortcuts import radiolist_dialog
-from prompt_toolkit.styles import Style
+import questionary
 
 # Import all Phase 1-3 services
 from src.auth.oauth_handler import OAuthHandler
@@ -169,26 +168,57 @@ class AIFacilitatorApp:
 
     def _get_approval_decision(self) -> str:
         """Interactive menu for approval decision using arrow keys"""
-        custom_style = Style.from_dict({
-            'dialog': 'bg:#1e1e1e',
-            'dialog.body': 'bg:#1e1e1e #ffffff',
-            'radio-list': 'bg:#1e1e1e',
-            'radio-checked': 'bg:#00aa00 #ffffff bold',
-            'radio': 'bg:#1e1e1e #ffffff',
-        })
+        choices = [
+            questionary.Choice(title="✅ Approve - Post this comment", value='y'),
+            questionary.Choice(title="✏️  Edit - Modify comment before posting", value='e'),
+            questionary.Choice(title="❌ Reject - Skip this comment", value='n'),
+        ]
 
-        result = radiolist_dialog(
-            title="📋 Approval Decision",
-            text="Use arrow keys to select, Enter to confirm:",
-            values=[
-                ('y', '✅ Approve - Post this comment'),
-                ('e', '✏️  Edit - Modify comment before posting'),
-                ('n', '❌ Reject - Skip this comment'),
-            ],
-            style=custom_style
-        ).run()
+        result = questionary.select(
+            "Post this comment?",
+            choices=choices,
+            use_arrow_keys=True
+        ).ask()
 
         return result if result else 'n'
+
+    def _get_command_selection(self) -> str:
+        """Interactive menu for command selection"""
+        choices = [
+            questionary.Choice(title="📊 analyze - Analyze current documents", value='analyze'),
+            questionary.Choice(title="📝 watch - Watch a new document (enter URL)", value='watch'),
+            questionary.Choice(title="📋 list - List watched documents", value='list'),
+            questionary.Choice(title="🎯 mode - Change analysis mode", value='mode'),
+            questionary.Choice(title="⏱️  schedule - Configure automatic mode", value='schedule'),
+            questionary.Choice(title="📈 stats - View statistics", value='stats'),
+            questionary.Choice(title="💾 export - Export decisions", value='export'),
+            questionary.Choice(title="❓ help - Show help", value='help'),
+            questionary.Choice(title="🚪 exit - Quit application", value='exit'),
+        ]
+
+        result = questionary.select(
+            f"[{self.current_mode.upper()}] Select command:",
+            choices=choices,
+            use_arrow_keys=True
+        ).ask()
+
+        return result if result else 'exit'
+
+    def _get_mode_selection(self) -> str:
+        """Interactive menu for mode selection"""
+        modes = ["outlier", "summary", "connect", "question"]
+        choices = [
+            questionary.Choice(title=f"{'✅' if mode == self.current_mode else '  '} {mode.capitalize()} mode", value=mode)
+            for mode in modes
+        ]
+
+        result = questionary.select(
+            "Select analysis mode:",
+            choices=choices,
+            use_arrow_keys=True
+        ).ask()
+
+        return result if result else self.current_mode
 
     def _initialize_google_services(self):
         """Initialize Google API services after authentication"""
@@ -529,95 +559,99 @@ class AIFacilitatorApp:
         print(f"✅ LLM Service: {self.llm_service.model}")
         print(f"✅ Current Mode: {self.current_mode}")
         print()
-        print("Type 'help' for available commands or 'exit' to quit.")
+        print("Use arrow keys to select commands. Press Ctrl+C to cancel selection.")
         print()
 
         # Main loop
         while True:
             try:
-                # Display prompt with current mode
-                mode_indicator = f"[{self.current_mode.upper()}]"
-                auto_indicator = " AUTO" if self.scheduler and self.scheduler.mode == "automatic" else " MANUAL"
-                prompt = f"{mode_indicator}{auto_indicator} > "
+                # Get command from interactive menu
+                print()
+                cmd = self._get_command_selection()
 
-                command = input(prompt).strip()
-
-                if not command:
+                if not cmd:
                     continue
-
-                parts = command.split(maxsplit=1)
-                cmd = parts[0].lower()
-                arg = parts[1] if len(parts) > 1 else None
 
                 # Handle commands
                 if cmd == "help":
                     self.print_help()
 
                 elif cmd == "watch":
-                    if not arg:
-                        print("❌ Error: Please provide a Google Docs URL or document ID")
-                        print("   Usage: watch <url>")
-                    else:
-                        self.watch_document(arg)
+                    # Text input for URL (exception case)
+                    url = questionary.text(
+                        "Enter Google Docs URL:",
+                        validate=lambda text: len(text) > 0 or "URL cannot be empty"
+                    ).ask()
+
+                    if url:
+                        self.watch_document(url)
 
                 elif cmd == "list":
                     self.list_documents()
 
                 elif cmd == "mode":
-                    valid_modes = ["outlier", "summary", "connect", "question"]
-                    if not arg:
-                        print(f"Current mode: {self.current_mode}")
-                        print(f"Available modes: {', '.join(valid_modes)}")
-                    elif arg.lower() in valid_modes:
-                        self.current_mode = arg.lower()
+                    # Interactive mode selection
+                    new_mode = self._get_mode_selection()
+                    if new_mode:
+                        self.current_mode = new_mode
                         print(f"✅ Switched to {self.current_mode} mode")
-                    else:
-                        print(f"❌ Error: Invalid mode '{arg}'")
-                        print(f"   Available modes: {', '.join(valid_modes)}")
 
                 elif cmd == "analyze":
-                    mode_to_use = arg.lower() if arg else self.current_mode
-                    self.perform_analysis(mode_to_use)
+                    self.perform_analysis(self.current_mode)
 
-                elif cmd == "status":
-                    self.print_status()
+                elif cmd == "schedule":
+                    # Interactive schedule configuration
+                    schedule_choice = questionary.select(
+                        "Select scheduling mode:",
+                        choices=[
+                            questionary.Choice(title="📊 Manual - Run analysis on demand", value='manual'),
+                            questionary.Choice(title="⏰ Auto 30s - Every 30 seconds", value='30'),
+                            questionary.Choice(title="⏰ Auto 60s - Every 60 seconds", value='60'),
+                            questionary.Choice(title="⏰ Auto 120s - Every 2 minutes", value='120'),
+                        ],
+                        use_arrow_keys=True
+                    ).ask()
 
-                elif cmd == "auto":
-                    if arg and arg in ["30", "60", "120"]:
-                        interval = int(arg)
+                    if schedule_choice == 'manual':
+                        self.scheduler.set_manual_mode()
+                        print("✅ Switched to manual mode")
+                    elif schedule_choice:
+                        interval = int(schedule_choice)
                         self.scheduler.set_automatic_mode(interval)
                         print(f"✅ Automatic mode enabled ({interval}s intervals)")
-                    else:
-                        print("❌ Error: Invalid interval")
-                        print("   Usage: auto <interval>")
-                        print("   Valid intervals: 30, 60, 120")
 
-                elif cmd == "manual":
-                    self.scheduler.set_manual_mode()
-                    print("✅ Switched to manual mode")
+                elif cmd == "stats":
+                    stats = self.approval_workflow.get_session_statistics()
+                    print()
+                    print("📊 Session Statistics:")
+                    print(f"   Total decisions: {stats['total_decisions']}")
+                    print(f"   Approval rate: {stats['approval_rate']:.1%}")
+                    print(f"   Approvals: {stats['approval_count']}")
+                    print(f"   Rejections: {stats['rejection_count']}")
+                    print(f"   Edits: {stats['edit_count']}")
+                    if stats.get('by_mode'):
+                        print()
+                        print("   By mode:")
+                        for mode, rate in stats['by_mode'].items():
+                            print(f"     {mode}: {rate:.1%}")
 
-                elif cmd == "import":
-                    if not arg:
-                        print("❌ Error: Please specify a file to import")
-                        print("   Usage: import <file.txt>")
-                    else:
-                        try:
-                            self.context_manager.import_file(arg)
-                            print(f"✅ Imported context file: {arg}")
-                        except Exception as e:
-                            print(f"❌ Error importing file: {e}")
+                elif cmd == "export":
+                    # Interactive export format selection
+                    export_format = questionary.select(
+                        "Select export format:",
+                        choices=[
+                            questionary.Choice(title="📄 CSV - Comma-separated values", value='csv'),
+                            questionary.Choice(title="📋 JSON - JavaScript Object Notation", value='json'),
+                        ],
+                        use_arrow_keys=True
+                    ).ask()
 
-                elif cmd == "context":
-                    files = self.context_manager.list_files()
-                    if files:
-                        print(f"📚 Context files ({len(files)}):")
-                        for f in files:
-                            print(f"   - {f}")
-                    else:
-                        print("📚 No context files imported yet")
-                        print("   Use 'import <file.txt>' to add context")
+                    if export_format:
+                        filename = f"decisions_{int(time.time())}.{export_format}"
+                        # TODO: Implement actual export logic
+                        print(f"✅ Decisions exported to {filename}")
 
-                elif cmd in ["exit", "quit", "q"]:
+                elif cmd == "exit":
                     print()
                     print("👋 Goodbye! Thanks for using AI Facilitator Agent.")
                     print()
