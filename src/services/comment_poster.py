@@ -102,17 +102,16 @@ class CommentPoster:
 
         print(f"   📊 Searching {len(content)} structural elements")
 
-        # Build full text with proper indices by walking through structure
+        # Build a complete text map with index positions
+        full_text = ""
+        index_map = []  # List of (char_position_in_full_text, structural_index)
+
         for element in content:
             if "paragraph" not in element:
                 continue
 
             paragraph = element["paragraph"]
             elements = paragraph.get("elements", [])
-
-            # Reconstruct text for this paragraph with its proper start index
-            paragraph_text = ""
-            paragraph_start_index = None
 
             for text_element in elements:
                 if "textRun" not in text_element:
@@ -122,22 +121,26 @@ class CommentPoster:
                 content_text = text_run.get("content", "")
                 start_index = text_element.get("startIndex")
 
-                if paragraph_start_index is None:
-                    paragraph_start_index = start_index
+                # Record the mapping between full_text position and structural index
+                for i, char in enumerate(content_text):
+                    index_map.append((len(full_text) + i, start_index + i))
 
-                paragraph_text += content_text
+                full_text += content_text
 
-            # Check if target text is in this paragraph
-            if target_lower in paragraph_text.lower():
-                # Find position within paragraph
-                offset = paragraph_text.lower().find(target_lower)
-                actual_start_index = paragraph_start_index + offset
+        # Search for target in the full text
+        if target_lower in full_text.lower():
+            # Find position in full_text
+            text_position = full_text.lower().find(target_lower)
 
-                print(f"   ✅ Match found in paragraph starting at index {paragraph_start_index}")
-                print(f"   📍 Target text starts at document index: {actual_start_index}")
+            # Look up the structural index for this position
+            if text_position < len(index_map):
+                _, structural_index = index_map[text_position]
+
+                print(f"   ✅ Match found at text position {text_position}")
+                print(f"   📍 Structural index: {structural_index}")
 
                 return {
-                    "index": actual_start_index,
+                    "index": structural_index,
                     "length": len(target_text)
                 }
 
