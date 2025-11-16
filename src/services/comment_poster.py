@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 import hashlib
 import time
+import re
 
 
 class CommentPoster:
@@ -52,9 +53,40 @@ class CommentPoster:
 
     def _find_text_position(self, target_text: str) -> Optional[Dict]:
         """Find position of target text in document"""
+        if not target_text or not self.current_document_text:
+            print(f"   ❌ DEBUG: Empty target_text or document_text")
+            return None
+
+        print(f"\n🔍 DEBUG - Text Matching:")
+        print(f"   Target text: '{target_text}'")
+        print(f"   Target length: {len(target_text)} chars")
+        print(f"   Document length: {len(self.current_document_text)} chars")
+        print(f"   Document preview: '{self.current_document_text[:200]}...'")
+
+        # Try exact match
         if target_text in self.current_document_text:
             index = self.current_document_text.find(target_text)
+            print(f"   ✅ Exact match found at index {index}")
             return {"index": index, "length": len(target_text)}
+
+        # Try case-insensitive match
+        lower_doc = self.current_document_text.lower()
+        lower_target = target_text.lower()
+        if lower_target in lower_doc:
+            index = lower_doc.find(lower_target)
+            print(f"   ✅ Case-insensitive match found at index {index}")
+            return {"index": index, "length": len(target_text)}
+
+        # No match found - show why
+        print(f"   ❌ No exact or case-insensitive match found")
+        print(f"   💡 Checking if words from target appear in document:")
+        words = target_text.lower().split()
+        for word in words[:5]:  # Check first 5 words
+            if word in lower_doc:
+                print(f"      ✓ '{word}' found")
+            else:
+                print(f"      ✗ '{word}' NOT found")
+
         return None
 
     def _call_docs_api(self, request: Dict[str, Any]) -> Dict[str, Any]:

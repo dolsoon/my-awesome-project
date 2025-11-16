@@ -310,6 +310,11 @@ class AIFacilitatorApp:
                 print(f"✅ Analysis complete")
                 print(f"   Confidence: {result.get('confidence', 0):.2f}")
 
+                # DEBUG: Show what LLM returned
+                print(f"\n🔍 DEBUG - LLM Response:")
+                print(f"   Target text: {result.get('target_text', 'None')}")
+                print(f"   Full result keys: {list(result.keys())}")
+
                 # Generate comment suggestion
                 suggestion = self._generate_comment_suggestion(result, mode)
 
