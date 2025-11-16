@@ -205,7 +205,6 @@ class CommentPoster:
         document_id = request["document_id"]
         comment_text = request["comment_text"]
         position = request.get("position")
-        target_text = request.get("target_text")  # Original target text from LLM
 
         # Determine insertion position
         if position and isinstance(position, dict):
@@ -220,21 +219,8 @@ class CommentPoster:
             insert_index = 1
             print(f"   ⚠️  Position not found, inserting at top")
 
-        # Format the AI message with context (Jaemin style - will apply bullet formatting)
-        if target_text:
-            # Extract first 40 chars of quote for context (preserve word boundaries)
-            if len(target_text) > 40:
-                # Find last space within 40 chars to avoid cutting words
-                preview_cutoff = target_text[:40].rfind(' ')
-                if preview_cutoff == -1:
-                    preview_cutoff = 40
-                quote_preview = target_text[:preview_cutoff] + "..."
-            else:
-                quote_preview = target_text
-
-            ai_message = f"Jaemin: Re: \"{quote_preview}\" — {comment_text}\n"
-        else:
-            ai_message = f"Jaemin: {comment_text}\n"
+        # Format the AI message (Jaemin style - will apply bullet formatting)
+        ai_message = f"Jaemin: {comment_text}\n"
 
         message_length = len(ai_message)
 
@@ -399,8 +385,7 @@ class CommentPoster:
             result = self._call_docs_api({
                 "document_id": document_id,
                 "comment_text": formatted_comment,
-                "position": position,
-                "target_text": target_text  # Pass original target text for accurate quote
+                "position": position
             })
 
             # Track posted comment
