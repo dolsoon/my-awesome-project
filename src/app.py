@@ -220,13 +220,27 @@ class AIFacilitatorApp:
 
         return result if result else self.current_mode
 
+    def _refresh_credentials_if_needed(self):
+        """Refresh OAuth credentials if expired"""
+        if self.oauth_handler.is_token_expired():
+            print("🔄 Refreshing expired OAuth token...")
+            try:
+                self.oauth_handler.refresh_token_now()
+                # Reinitialize Google services with fresh token
+                self._initialize_google_services()
+                print("✅ Token refreshed successfully")
+            except Exception as e:
+                print(f"❌ Token refresh failed: {e}")
+                print("   Please restart the app to re-authenticate")
+                sys.exit(1)
+
     def _initialize_google_services(self):
         """Initialize Google API services after authentication"""
         try:
             from googleapiclient.discovery import build
             from google.oauth2.credentials import Credentials
 
-            # Create credentials object
+            # Create credentials object with refresh capability
             credentials = Credentials(
                 token=self.oauth_handler.access_token,
                 refresh_token=self.oauth_handler.refresh_token,
@@ -272,6 +286,9 @@ class AIFacilitatorApp:
 
     def watch_document(self, url_or_id: str) -> bool:
         """Register a document for monitoring"""
+        # Refresh credentials if needed before API calls
+        self._refresh_credentials_if_needed()
+
         doc_id = self.extract_doc_id(url_or_id)
 
         if not doc_id:
@@ -312,6 +329,9 @@ class AIFacilitatorApp:
 
     def perform_analysis(self, mode: Optional[str] = None):
         """Perform LLM analysis on watched documents"""
+        # Refresh credentials if needed before API calls
+        self._refresh_credentials_if_needed()
+
         analysis_mode = mode or self.current_mode
 
         docs = self.document_monitor.watched_documents
