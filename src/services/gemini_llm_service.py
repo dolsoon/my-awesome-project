@@ -50,8 +50,11 @@ Instructions:
 - Provide a CONCISE encouragement message (1-2 sentences maximum, direct and specific)
 - Return JSON: {{"outlier_found": bool, "target_text": str, "unique_aspect": str, "similarity_score": float, "confidence": float, "encouragement_message": str}}
 
-IMPORTANT:
-- The "target_text" must be an exact substring from the contributions above
+CRITICAL - TARGET_TEXT REQUIREMENTS:
+- The "target_text" MUST be copied EXACTLY character-for-character from the contributions above
+- Do NOT paraphrase, rephrase, summarize, or modify the text in ANY way
+- Copy-paste the text VERBATIM - it must match the original word-for-word
+- If you cannot find exact text to copy, return empty string "" for target_text
 - The "encouragement_message" must be 1-2 sentences, concise and actionable"""
 
     def _format_contributions(self, document: Dict) -> str:
@@ -91,8 +94,11 @@ Instructions:
 - Provide a CONCISE summary (1-2 sentences maximum, highlighting key patterns)
 - Return JSON: {{"target_text": str, "themes": [str], "summary": str, "contributor_count": int, "confidence": float}}
 
-IMPORTANT:
-- The "target_text" must be an exact substring from the contributions above
+CRITICAL - TARGET_TEXT REQUIREMENTS:
+- The "target_text" MUST be copied EXACTLY character-for-character from the contributions above
+- Do NOT paraphrase, rephrase, summarize, or modify the text in ANY way
+- Copy-paste the text VERBATIM - it must match the original word-for-word
+- If you cannot find exact text to copy, return empty string "" for target_text
 - The "summary" must be 1-2 sentences, concise and actionable"""
 
     def _format_contributions(self, document: Dict) -> str:
@@ -122,8 +128,11 @@ Instructions:
 - Provide a CONCISE connection message (1-2 sentences maximum, specific and actionable)
 - Return JSON: {{"target_text": str, "connections": [{{"author1": str, "author2": str, "common_theme": str, "connection_message": str}}], "confidence": float}}
 
-IMPORTANT:
-- The "target_text" must be an exact substring from the contributions above
+CRITICAL - TARGET_TEXT REQUIREMENTS:
+- The "target_text" MUST be copied EXACTLY character-for-character from the contributions above
+- Do NOT paraphrase, rephrase, summarize, or modify the text in ANY way
+- Copy-paste the text VERBATIM - it must match the original word-for-word
+- If you cannot find exact text to copy, return empty string "" for target_text
 - The "connection_message" must be 1-2 sentences, concise and actionable"""
 
     def _format_contributions(self, document: Dict) -> str:
@@ -153,8 +162,11 @@ Instructions:
 - Use Socratic method to encourage critical thinking
 - Return JSON: {{"target_text": str, "target_author": str, "clarifying_questions": [str], "confidence": float}}
 
-IMPORTANT:
-- The "target_text" must be an exact substring from the contributions above
+CRITICAL - TARGET_TEXT REQUIREMENTS:
+- The "target_text" MUST be copied EXACTLY character-for-character from the contributions above
+- Do NOT paraphrase, rephrase, summarize, or modify the text in ANY way
+- Copy-paste the text VERBATIM - it must match the original word-for-word
+- If you cannot find exact text to copy, return empty string "" for target_text
 - Questions must be concise (1-2 questions maximum), specific and actionable"""
 
     def _format_contributions(self, document: Dict) -> str:
