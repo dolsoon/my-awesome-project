@@ -106,10 +106,8 @@ class CommentPoster:
                     position["index"]:position["index"] + position["length"]
                 ].strip()
         else:
-            # Insert at the end of the document
-            # First, get document to find the end index
-            doc = self.docs_api_client.documents().get(documentId=document_id).execute()
-            insert_index = doc.get("body", {}).get("content", [{}])[-1].get("endIndex", 1) - 1
+            # Insert at the top of the document (so users see it immediately)
+            insert_index = 1  # Index 1 is right after the document start
 
         # Format the AI message with context
         if target_text_quote:
