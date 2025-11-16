@@ -440,39 +440,28 @@ class AIFacilitatorApp:
             print(f"❌ Error analyzing document: {e}")
 
     def _generate_comment_suggestion(self, analysis_result: Dict, mode: str) -> Dict:
-        """Generate comment suggestion from analysis result"""
+        """Generate concise comment suggestion from analysis result"""
         if mode == "outlier":
-            comment_text = (
-                f"🎯 Unique contribution detected!\n\n"
-                f"{analysis_result.get('encouragement_message', 'Great work!')}\n\n"
-                f"Unique aspect: {analysis_result.get('unique_aspect', 'N/A')}\n"
-                f"Similarity score: {analysis_result.get('similarity_score', 0):.2f}"
-            )
+            # Use the LLM's concise encouragement message directly
+            comment_text = analysis_result.get('encouragement_message', 'Great work!')
+
         elif mode == "summary":
-            themes = ", ".join(analysis_result.get('themes', []))
-            comment_text = (
-                f"📊 Discussion Summary\n\n"
-                f"Main themes: {themes}\n\n"
-                f"{analysis_result.get('summary', 'No summary available')}"
-            )
+            # Use the LLM's concise summary directly
+            comment_text = analysis_result.get('summary', 'No summary available')
+
         elif mode == "connect":
             connections = analysis_result.get('connections', [])
             if connections:
                 conn = connections[0]
-                comment_text = (
-                    f"🔗 Connection Found!\n\n"
-                    f"{conn.get('author1', 'Author A')} and {conn.get('author2', 'Author B')} "
-                    f"have similar ideas about {conn.get('common_theme', 'this topic')}.\n\n"
-                    f"{conn.get('connection_message', 'Consider collaborating!')}"
-                )
+                # Use the LLM's concise connection message directly
+                comment_text = conn.get('connection_message', 'Consider collaborating!')
             else:
                 comment_text = "No connections found at this time."
+
         elif mode == "question":
             questions = analysis_result.get('clarifying_questions', [])
-            comment_text = (
-                f"💭 Socratic Questions for {analysis_result.get('target_author', 'the team')}\n\n"
-                + "\n".join(f"- {q}" for q in questions)
-            )
+            # Format questions concisely
+            comment_text = " ".join(questions) if questions else "No questions at this time."
         else:
             comment_text = "Analysis complete."
 

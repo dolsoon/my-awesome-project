@@ -91,6 +91,40 @@ class CommentPoster:
         print(f"   ❌ No match found")
         return None
 
+    def _find_paragraph_end(self, start_index: int) -> int:
+        """Find the end of paragraph (next newline) after start_index"""
+        if not self.current_document_structure:
+            return start_index
+
+        body = self.current_document_structure.get("body", {})
+        content = body.get("content", [])
+
+        # Walk through structural elements to find newline after start_index
+        for element in content:
+            if "paragraph" not in element:
+                continue
+
+            paragraph = element["paragraph"]
+            elements = paragraph.get("elements", [])
+
+            for text_element in elements:
+                if "textRun" not in text_element:
+                    continue
+
+                text_run = text_element["textRun"]
+                content_text = text_run.get("content", "")
+                elem_start = text_element.get("startIndex")
+                elem_end = text_element.get("endIndex")
+
+                # If this element is after our start_index and contains newline
+                if elem_start >= start_index and "\n" in content_text:
+                    # Find first newline position
+                    newline_offset = content_text.find("\n")
+                    return elem_start + newline_offset + 1  # After the newline
+
+        # If no newline found, return original position
+        return start_index
+
     def _find_in_structure(self, target_text: str) -> Optional[Dict]:
         """Search for target text in document structure (accurate indices)"""
         if not self.current_document_structure:
@@ -156,9 +190,12 @@ class CommentPoster:
         # Determine insertion position and extract context
         target_text_quote = None
         if position and isinstance(position, dict):
-            # Insert AFTER the target text using structural indices
-            insert_index = position["index"] + position["length"]
-            print(f"   📍 Inserting after target text at index {insert_index}")
+            # Find the end of the paragraph containing the target text
+            target_end_index = position["index"] + position["length"]
+
+            # Find next paragraph break (newline) after target text
+            insert_index = self._find_paragraph_end(target_end_index)
+            print(f"   📍 Inserting after paragraph at index {insert_index}")
 
             # Extract the target text for context display
             if self.current_document_text:
@@ -170,15 +207,17 @@ class CommentPoster:
             insert_index = 1
             print(f"   ⚠️  Position not found, inserting at top")
 
-        # Format the AI message with context
+        # Format the AI message with context (Jaemin style with bullet points)
         if target_text_quote:
-            ai_message = f"\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🤖 AI Facilitator\n📍 Regarding: \"{target_text_quote}\"\n\n{comment_text}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            # Extract first 30 chars of quote for compact context
+            quote_preview = target_text_quote[:30] + "..." if len(target_text_quote) > 30 else target_text_quote
+            ai_message = f"\n\nJaemin: • Re: \"{quote_preview}\" — {comment_text}\n\n"
         else:
-            ai_message = f"\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🤖 AI Facilitator\n\n{comment_text}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            ai_message = f"\n\nJaemin: • {comment_text}\n\n"
 
         message_length = len(ai_message)
 
-        # Create batchUpdate requests
+        # Create batchUpdate requests with compact styling
         requests = [
             # 1. Insert the text
             {
@@ -187,7 +226,7 @@ class CommentPoster:
                     "text": ai_message
                 }
             },
-            # 2. Style the entire block (light blue background, italic)
+            # 2. Style the entire comment (light blue background)
             {
                 "updateTextStyle": {
                     "range": {
@@ -204,43 +243,40 @@ class CommentPoster:
                                 }
                             }
                         },
-                        "italic": True,
                         "fontSize": {
-                            "magnitude": 11,
+                            "magnitude": 10,
                             "unit": "PT"
                         }
                     },
-                    "fields": "backgroundColor,italic,fontSize"
+                    "fields": "backgroundColor,fontSize"
                 }
             }
         ]
 
-        # If we have a quoted context, make it bold for emphasis
-        if target_text_quote:
-            # Find the position of the quoted text in the ai_message
-            quote_start = ai_message.find(f'"{target_text_quote}"')
-            if quote_start != -1:
-                requests.append({
-                    "updateTextStyle": {
-                        "range": {
-                            "startIndex": insert_index + quote_start,
-                            "endIndex": insert_index + quote_start + len(target_text_quote) + 2  # +2 for quotes
-                        },
-                        "textStyle": {
-                            "bold": True,
-                            "foregroundColor": {
-                                "color": {
-                                    "rgbColor": {
-                                        "red": 0.2,
-                                        "green": 0.3,
-                                        "blue": 0.6
-                                    }
+        # Make "Jaemin:" bold
+        jaemin_end = ai_message.find(":")
+        if jaemin_end != -1:
+            requests.append({
+                "updateTextStyle": {
+                    "range": {
+                        "startIndex": insert_index + ai_message.find("Jaemin"),
+                        "endIndex": insert_index + jaemin_end + 1
+                    },
+                    "textStyle": {
+                        "bold": True,
+                        "foregroundColor": {
+                            "color": {
+                                "rgbColor": {
+                                    "red": 0.2,
+                                    "green": 0.3,
+                                    "blue": 0.6
                                 }
                             }
-                        },
-                        "fields": "bold,foregroundColor"
-                    }
-                })
+                        }
+                    },
+                    "fields": "bold,foregroundColor"
+                }
+            })
 
         # Call Google Docs API
         result = self.docs_api_client.documents().batchUpdate(
