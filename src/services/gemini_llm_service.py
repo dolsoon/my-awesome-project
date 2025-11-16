@@ -348,14 +348,27 @@ class GeminiLLMService:
     def _parse_structured_response(self, response: str) -> Optional[Dict]:
         """Parse structured JSON response from Gemini"""
         try:
-            # Extract JSON from response
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if json_match:
-                parsed = json.loads(json_match.group())
-                logger.debug(f"Successfully parsed response: {type(parsed)}")
-                return parsed
-        except (json.JSONDecodeError, AttributeError) as e:
+            # Find the first JSON object in the response
+            # Use JSONDecoder to extract just the first valid JSON object
+            from json import JSONDecoder
+
+            # Find the start of JSON (first '{')
+            start_idx = response.find('{')
+            if start_idx == -1:
+                logger.warning("No JSON object found in response")
+                return None
+
+            # Use raw_decode to extract just the first JSON object
+            decoder = JSONDecoder()
+            parsed, end_idx = decoder.raw_decode(response[start_idx:])
+
+            logger.debug(f"Successfully parsed response: {type(parsed)}")
+            return parsed
+
+        except (json.JSONDecodeError, ValueError, AttributeError) as e:
             logger.warning(f"Failed to parse response as JSON: {str(e)}")
+            # Try to print the problematic response for debugging
+            logger.debug(f"Response text: {response[:500]}...")
             pass
         return None
 
