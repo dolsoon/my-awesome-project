@@ -95,19 +95,18 @@ class CommentPoster:
         comment_text = request["comment_text"]
         position = request.get("position")
 
-        # Determine insertion position and extract context
+        # ALWAYS insert at top to avoid breaking existing text
+        # (Plain text indices don't match document structure indices)
+        insert_index = 1  # Index 1 is right after the document start
+
+        # Extract target text for context display (but don't use for positioning)
         target_text_quote = None
         if position and isinstance(position, dict):
-            # Insert after the target text
-            insert_index = position["index"] + position["length"]
-            # Extract the target text for context
+            # Extract the target text for context display only
             if self.current_document_text:
                 target_text_quote = self.current_document_text[
                     position["index"]:position["index"] + position["length"]
                 ].strip()
-        else:
-            # Insert at the top of the document (so users see it immediately)
-            insert_index = 1  # Index 1 is right after the document start
 
         # Format the AI message with context
         if target_text_quote:
