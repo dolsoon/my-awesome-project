@@ -48,6 +48,29 @@ class CommentPoster:
         key = f"{document_id}:{position}".encode()
         return hashlib.md5(key).hexdigest()
 
+    def _extract_plain_text(self, doc: Dict) -> str:
+        """Extract plain text from document structure"""
+        body = doc.get("body", {})
+        content = body.get("content", [])
+        text_parts = []
+
+        for element in content:
+            if "paragraph" not in element:
+                continue
+
+            paragraph = element["paragraph"]
+            elements = paragraph.get("elements", [])
+
+            for text_element in elements:
+                if "textRun" not in text_element:
+                    continue
+
+                text_run = text_element["textRun"]
+                content_text = text_run.get("content", "")
+                text_parts.append(content_text)
+
+        return "".join(text_parts)
+
     def _find_text_position(self, target_text: str) -> Optional[Dict]:
         """Find position of target text in document using structural content"""
         if not target_text:
@@ -321,12 +344,33 @@ class CommentPoster:
 
         if text_position:
             if isinstance(text_position, str):
-                # LLM provided target text - find its position in document
-                target_text = text_position  # Store original target text
+                # LLM provided target text - store it
+                target_text = text_position
+
+                # REFRESH DOCUMENT: Re-fetch to get current state (handles live collaboration)
+                print(f"   🔄 Refreshing document to get current state...")
+                try:
+                    fresh_doc = self.docs_api_client.documents().get(
+                        documentId=document_id
+                    ).execute()
+                    self.current_document_structure = fresh_doc
+                    self.current_document_text = self._extract_plain_text(fresh_doc)
+                    print(f"   ✅ Document refreshed")
+                except Exception as e:
+                    print(f"   ⚠️  Failed to refresh document: {e}")
+                    # Continue with existing structure
+
+                # Re-find position in fresh document
                 position = self._find_text_position(text_position)
                 if position is None:
-                    # Text not found - post at top as fallback
-                    print(f"   ⚠️  Target text not found in document, posting at top")
+                    # Text not found - might have been edited/deleted
+                    print(f"   ⚠️  Target text not found in current document")
+                    print(f"   💡 Possible reasons: text edited/deleted by collaborators")
+                    return {
+                        "success": False,
+                        "error": "Target text not found in current document state",
+                        "suggestion": "Text may have been edited/deleted. Try analyzing again."
+                    }
             elif isinstance(text_position, dict):
                 # Already a position dict
                 position = text_position
