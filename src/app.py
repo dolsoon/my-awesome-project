@@ -323,6 +323,13 @@ class AIFacilitatorApp:
                 print("=" * 70)
                 print("📊 Suggested Comment:")
                 print("─" * 70)
+
+                # Show context if available
+                target_text = result.get("target_text")
+                if target_text:
+                    print(f"📍 Regarding: \"{target_text}\"")
+                    print()
+
                 print(suggestion["comment_text"])
                 print("─" * 70)
                 print()
