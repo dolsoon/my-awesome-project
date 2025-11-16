@@ -220,7 +220,7 @@ class CommentPoster:
             insert_index = 1
             print(f"   ⚠️  Position not found, inserting at top")
 
-        # Format the AI message with context (Jaemin style with bullet points)
+        # Format the AI message with context (Jaemin style - will apply bullet formatting)
         if target_text:
             # Extract first 40 chars of quote for context (preserve word boundaries)
             if len(target_text) > 40:
@@ -232,9 +232,9 @@ class CommentPoster:
             else:
                 quote_preview = target_text
 
-            ai_message = f"• Jaemin: Re: \"{quote_preview}\" — {comment_text}\n"
+            ai_message = f"Jaemin: Re: \"{quote_preview}\" — {comment_text}\n"
         else:
-            ai_message = f"• Jaemin: {comment_text}\n"
+            ai_message = f"Jaemin: {comment_text}\n"
 
         message_length = len(ai_message)
 
@@ -298,6 +298,17 @@ class CommentPoster:
                     "fields": "bold,foregroundColor"
                 }
             })
+
+        # Apply bullet list formatting (proper Google Docs bullet, not character)
+        requests.append({
+            "createParagraphBullets": {
+                "range": {
+                    "startIndex": insert_index,
+                    "endIndex": insert_index + message_length - 1  # Exclude trailing newline
+                },
+                "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE"
+            }
+        })
 
         # Call Google Docs API
         result = self.docs_api_client.documents().batchUpdate(
