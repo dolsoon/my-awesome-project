@@ -209,9 +209,9 @@ class CommentPoster:
             else:
                 quote_preview = target_text
 
-            ai_message = f"\n\n• Jaemin: Re: \"{quote_preview}\" — {comment_text}\n\n"
+            ai_message = f"\n• Jaemin: Re: \"{quote_preview}\" — {comment_text}\n"
         else:
-            ai_message = f"\n\n• Jaemin: {comment_text}\n\n"
+            ai_message = f"\n• Jaemin: {comment_text}\n"
 
         message_length = len(ai_message)
 
