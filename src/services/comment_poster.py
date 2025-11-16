@@ -58,40 +58,76 @@ class CommentPoster:
         return None
 
     def _call_docs_api(self, request: Dict[str, Any]) -> Dict[str, Any]:
-        """Call Google Drive API to post comment (comments are Drive API, not Docs API)"""
+        """Insert AI facilitation text directly into the document with formatting"""
         document_id = request["document_id"]
         comment_text = request["comment_text"]
         position = request.get("position")
 
-        # Create comment body for Drive API
-        comment_body = {
-            "content": comment_text
-        }
-
-        # Add quoted text range if position is specified
+        # Determine insertion position
         if position and isinstance(position, dict):
-            # Position-based comment with text highlighting
-            comment_body["quotedFileContent"] = {
-                "mimeType": "text/plain",
-                "value": self.current_document_text[
-                    position["index"]:position["index"] + position["length"]
-                ]
-            }
-            comment_body["anchor"] = f"r{position['index']}"
+            # Insert after the target text
+            insert_index = position["index"] + position["length"]
+        else:
+            # Insert at the end of the document
+            # First, get document to find the end index
+            doc = self.docs_api_client.documents().get(documentId=document_id).execute()
+            insert_index = doc.get("body", {}).get("content", [{}])[-1].get("endIndex", 1) - 1
 
-        # Call Google Drive API (comments().create())
-        result = self.drive_api_client.comments().create(
-            fileId=document_id,
-            body=comment_body,
-            fields="id,content,quotedFileContent,anchor"
+        # Format the AI message
+        ai_message = f"\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🤖 AI Facilitator\n{comment_text}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+
+        message_length = len(ai_message)
+
+        # Create batchUpdate requests
+        requests = [
+            # 1. Insert the text
+            {
+                "insertText": {
+                    "location": {"index": insert_index},
+                    "text": ai_message
+                }
+            },
+            # 2. Style the text (light blue background, italic)
+            {
+                "updateTextStyle": {
+                    "range": {
+                        "startIndex": insert_index,
+                        "endIndex": insert_index + message_length
+                    },
+                    "textStyle": {
+                        "backgroundColor": {
+                            "color": {
+                                "rgbColor": {
+                                    "red": 0.85,
+                                    "green": 0.92,
+                                    "blue": 1.0
+                                }
+                            }
+                        },
+                        "italic": True,
+                        "fontSize": {
+                            "magnitude": 11,
+                            "unit": "PT"
+                        }
+                    },
+                    "fields": "backgroundColor,italic,fontSize"
+                }
+            }
+        ]
+
+        # Call Google Docs API
+        result = self.docs_api_client.documents().batchUpdate(
+            documentId=document_id,
+            body={"requests": requests}
         ).execute()
 
-        # Extract comment ID from response
-        comment_id = result.get("id")
+        # Generate a pseudo comment ID for tracking
+        comment_id = f"text_{insert_index}_{int(time.time())}"
 
         return {
             "commentId": comment_id,
-            "success": True
+            "success": True,
+            "insertIndex": insert_index
         }
 
     def post_comment(
