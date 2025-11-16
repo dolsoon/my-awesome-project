@@ -1,7 +1,7 @@
 {
   "branch": "feature/SPEC-AI-FACIL-001",
-  "last_commit": "f73b284 fix(app): correct CommentPoster.post_comment() parameters",
-  "commit_time": "2 minutes ago",
+  "last_commit": "43ad985 fix(comment): insert at top instead of bottom when position not found",
+  "commit_time": "9 minutes ago",
   "changes": 1,
-  "last_check": "2025-11-16T08:40:03.111093"
+  "last_check": "2025-11-16T09:33:46.318039"
 }

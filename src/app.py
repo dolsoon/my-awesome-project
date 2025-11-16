@@ -341,9 +341,10 @@ class AIFacilitatorApp:
                     # Extract target text from LLM result (if available)
                     target_text = result.get("target_text")
 
-                    # Set document text for position finding
+                    # Set document content for position finding (use structure for accurate indices)
                     if target_text:
                         self.comment_poster.current_document_text = text
+                        self.comment_poster.current_document_structure = doc_content
 
                     # Post comment
                     comment_dict = {
@@ -388,9 +389,10 @@ class AIFacilitatorApp:
                         # Extract target text from LLM result (if available)
                         target_text = result.get("target_text")
 
-                        # Set document text for position finding
+                        # Set document content for position finding (use structure for accurate indices)
                         if target_text:
                             self.comment_poster.current_document_text = text
+                            self.comment_poster.current_document_structure = doc_content
 
                         # Post edited comment
                         comment_dict = {

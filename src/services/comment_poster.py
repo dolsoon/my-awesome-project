@@ -27,6 +27,7 @@ class CommentPoster:
         self.failed_queue: List[Dict] = []
         self.posting_history: List[Dict] = []
         self.current_document_text: str = ""
+        self.current_document_structure: Optional[Dict] = None  # Store structured content
 
     def format_comment(self, comment: Dict[str, Any]) -> str:
         """Format comment with mode attribution and metadata"""
@@ -52,16 +53,26 @@ class CommentPoster:
         return hashlib.md5(key).hexdigest()
 
     def _find_text_position(self, target_text: str) -> Optional[Dict]:
-        """Find position of target text in document"""
-        if not target_text or not self.current_document_text:
-            print(f"   ❌ DEBUG: Empty target_text or document_text")
+        """Find position of target text in document using structural content"""
+        if not target_text:
+            print(f"   ❌ DEBUG: Empty target_text")
             return None
 
-        print(f"\n🔍 DEBUG - Text Matching:")
+        print(f"\n🔍 DEBUG - Text Matching (Structural):")
         print(f"   Target text: '{target_text}'")
         print(f"   Target length: {len(target_text)} chars")
+
+        # Use structural content if available (accurate indices)
+        if self.current_document_structure:
+            return self._find_in_structure(target_text)
+
+        # Fallback to plain text search (less accurate)
+        if not self.current_document_text:
+            print(f"   ❌ DEBUG: No document content available")
+            return None
+
+        print(f"   ⚠️  Using plain text fallback (may be inaccurate)")
         print(f"   Document length: {len(self.current_document_text)} chars")
-        print(f"   Document preview: '{self.current_document_text[:200]}...'")
 
         # Try exact match
         if target_text in self.current_document_text:
@@ -77,16 +88,60 @@ class CommentPoster:
             print(f"   ✅ Case-insensitive match found at index {index}")
             return {"index": index, "length": len(target_text)}
 
-        # No match found - show why
-        print(f"   ❌ No exact or case-insensitive match found")
-        print(f"   💡 Checking if words from target appear in document:")
-        words = target_text.lower().split()
-        for word in words[:5]:  # Check first 5 words
-            if word in lower_doc:
-                print(f"      ✓ '{word}' found")
-            else:
-                print(f"      ✗ '{word}' NOT found")
+        print(f"   ❌ No match found")
+        return None
 
+    def _find_in_structure(self, target_text: str) -> Optional[Dict]:
+        """Search for target text in document structure (accurate indices)"""
+        if not self.current_document_structure:
+            return None
+
+        target_lower = target_text.lower()
+        body = self.current_document_structure.get("body", {})
+        content = body.get("content", [])
+
+        print(f"   📊 Searching {len(content)} structural elements")
+
+        # Build full text with proper indices by walking through structure
+        for element in content:
+            if "paragraph" not in element:
+                continue
+
+            paragraph = element["paragraph"]
+            elements = paragraph.get("elements", [])
+
+            # Reconstruct text for this paragraph with its proper start index
+            paragraph_text = ""
+            paragraph_start_index = None
+
+            for text_element in elements:
+                if "textRun" not in text_element:
+                    continue
+
+                text_run = text_element["textRun"]
+                content_text = text_run.get("content", "")
+                start_index = text_element.get("startIndex")
+
+                if paragraph_start_index is None:
+                    paragraph_start_index = start_index
+
+                paragraph_text += content_text
+
+            # Check if target text is in this paragraph
+            if target_lower in paragraph_text.lower():
+                # Find position within paragraph
+                offset = paragraph_text.lower().find(target_lower)
+                actual_start_index = paragraph_start_index + offset
+
+                print(f"   ✅ Match found in paragraph starting at index {paragraph_start_index}")
+                print(f"   📍 Target text starts at document index: {actual_start_index}")
+
+                return {
+                    "index": actual_start_index,
+                    "length": len(target_text)
+                }
+
+        print(f"   ❌ Target text not found in document structure")
         return None
 
     def _call_docs_api(self, request: Dict[str, Any]) -> Dict[str, Any]:
@@ -95,18 +150,22 @@ class CommentPoster:
         comment_text = request["comment_text"]
         position = request.get("position")
 
-        # ALWAYS insert at top to avoid breaking existing text
-        # (Plain text indices don't match document structure indices)
-        insert_index = 1  # Index 1 is right after the document start
-
-        # Extract target text for context display (but don't use for positioning)
+        # Determine insertion position and extract context
         target_text_quote = None
         if position and isinstance(position, dict):
-            # Extract the target text for context display only
+            # Insert AFTER the target text using structural indices
+            insert_index = position["index"] + position["length"]
+            print(f"   📍 Inserting after target text at index {insert_index}")
+
+            # Extract the target text for context display
             if self.current_document_text:
                 target_text_quote = self.current_document_text[
                     position["index"]:position["index"] + position["length"]
                 ].strip()
+        else:
+            # Fallback: Insert at top when position not found
+            insert_index = 1
+            print(f"   ⚠️  Position not found, inserting at top")
 
         # Format the AI message with context
         if target_text_quote:
