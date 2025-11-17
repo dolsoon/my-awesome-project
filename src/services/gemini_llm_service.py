@@ -9,174 +9,20 @@ import re
 import time
 import logging
 from typing import Optional, Dict, List, Any
-from abc import ABC, abstractmethod
 import tiktoken
 import google.generativeai as genai
 from google.api_core import retry, exceptions
 
+# Import prompt templates from separate files
+from ..prompts import (
+    OutlierPromptTemplate,
+    SummaryPromptTemplate,
+    ConnectPromptTemplate,
+    QuestionPromptTemplate,
+)
+
 # Configure logging
 logger = logging.getLogger(__name__)
-
-
-class PromptTemplate(ABC):
-    """Abstract base class for mode-specific prompt templates"""
-
-    @abstractmethod
-    def generate(self, document: Dict[str, Any]) -> str:
-        """Generate prompt for specific mode"""
-        pass
-
-
-class OutlierPromptTemplate(PromptTemplate):
-    """Prompt template for Outlier detection mode"""
-
-    def generate(self, document: Dict[str, Any]) -> str:
-        """Generate outlier detection prompt"""
-        contributions_text = self._format_contributions(document)
-        context_files_text = self._format_context_files(document)
-
-        full_context = contributions_text
-        if context_files_text:
-            full_context = f"{context_files_text}\n\n{contributions_text}"
-
-        return f"""Analyze these collaborative contributions for outlier detection.
-
-{full_context}
-
-Instructions:
-- Identify the most unique contribution (outlier)
-- Extract the EXACT TEXT from the document that represents this unique contribution (5-20 words)
-- Rate similarity to other contributions on a scale of 0.0 (unique) to 1.0 (similar)
-- Provide a CONCISE encouragement message (1-2 sentences maximum, direct and specific)
-- Return JSON: {{"outlier_found": bool, "target_text": str, "unique_aspect": str, "similarity_score": float, "confidence": float, "encouragement_message": str}}
-
-CRITICAL - TARGET_TEXT REQUIREMENTS:
-- The "target_text" MUST be copied EXACTLY character-for-character from the contributions above
-- Do NOT paraphrase, rephrase, summarize, or modify the text in ANY way
-- Copy-paste the text VERBATIM - it must match the original word-for-word
-- If you cannot find exact text to copy, return empty string "" for target_text
-- The "encouragement_message" must be 1-2 sentences, concise and actionable"""
-
-    def _format_contributions(self, document: Dict) -> str:
-        """Format contributions for prompt"""
-        lines = []
-        for contrib in document.get("contributions", []):
-            author = contrib.get('author', 'Anonymous')
-            text = contrib.get('text', '')
-            lines.append(f"{author}: {text}")
-        return "\n".join(lines)
-
-    def _format_context_files(self, document: Dict) -> str:
-        """Format context files for prompt"""
-        if not document.get("context_files"):
-            return ""
-        lines = ["CONTEXT FILES:"]
-        for ctx_file in document.get("context_files", []):
-            filename = ctx_file.get("filename", "unknown")
-            content = ctx_file.get("content", "")
-            lines.append(f"[{filename}] {content}")
-        return "\n".join(lines)
-
-
-class SummaryPromptTemplate(PromptTemplate):
-    """Prompt template for Summary mode"""
-
-    def generate(self, document: Dict[str, Any]) -> str:
-        """Generate summary and clustering prompt"""
-        contributions_text = self._format_contributions(document)
-        return f"""Analyze these contributions for clustering and theme identification.
-
-{contributions_text}
-
-Instructions:
-- Identify recurring themes or clusters
-- Extract the EXACT TEXT representing the most prominent theme (5-20 words)
-- Provide a CONCISE summary (1-2 sentences maximum, highlighting key patterns)
-- Return JSON: {{"target_text": str, "themes": [str], "summary": str, "contributor_count": int, "confidence": float}}
-
-CRITICAL - TARGET_TEXT REQUIREMENTS:
-- The "target_text" MUST be copied EXACTLY character-for-character from the contributions above
-- Do NOT paraphrase, rephrase, summarize, or modify the text in ANY way
-- Copy-paste the text VERBATIM - it must match the original word-for-word
-- If you cannot find exact text to copy, return empty string "" for target_text
-- The "summary" must be 1-2 sentences, concise and actionable"""
-
-    def _format_contributions(self, document: Dict) -> str:
-        """Format contributions for prompt"""
-        lines = []
-        for contrib in document.get("contributions", []):
-            author = contrib.get('author', 'Anonymous')
-            text = contrib.get('text', '')
-            lines.append(f"{author}: {text}")
-        return "\n".join(lines)
-
-
-class ConnectPromptTemplate(PromptTemplate):
-    """Prompt template for Connect mode"""
-
-    def generate(self, document: Dict[str, Any]) -> str:
-        """Generate connection detection prompt"""
-        contributions_text = self._format_contributions(document)
-        return f"""Find connections between ideas from different authors.
-
-{contributions_text}
-
-Instructions:
-- Find pairs of ideas from different authors that are similar or complementary
-- Extract the EXACT TEXT from one of the connected ideas (5-20 words)
-- Do NOT connect ideas from the same author
-- Provide a CONCISE connection message (1-2 sentences maximum, specific and actionable)
-- Return JSON: {{"target_text": str, "connections": [{{"author1": str, "author2": str, "common_theme": str, "connection_message": str}}], "confidence": float}}
-
-CRITICAL - TARGET_TEXT REQUIREMENTS:
-- The "target_text" MUST be copied EXACTLY character-for-character from the contributions above
-- Do NOT paraphrase, rephrase, summarize, or modify the text in ANY way
-- Copy-paste the text VERBATIM - it must match the original word-for-word
-- If you cannot find exact text to copy, return empty string "" for target_text
-- The "connection_message" must be 1-2 sentences, concise and actionable"""
-
-    def _format_contributions(self, document: Dict) -> str:
-        """Format contributions for prompt"""
-        lines = []
-        for contrib in document.get("contributions", []):
-            author = contrib.get('author', 'Anonymous')
-            text = contrib.get('text', '')
-            lines.append(f"{author}: {text}")
-        return "\n".join(lines)
-
-
-class QuestionPromptTemplate(PromptTemplate):
-    """Prompt template for Question mode"""
-
-    def generate(self, document: Dict[str, Any]) -> str:
-        """Generate Socratic questioning prompt"""
-        contributions_text = self._format_contributions(document)
-        return f"""Generate Socratic questions to deepen contributor thinking.
-
-{contributions_text}
-
-Instructions:
-- Select a contributor whose ideas could be deepened
-- Extract the EXACT TEXT from their contribution that needs deepening (5-20 words)
-- Ask 1-2 CONCISE clarifying questions (specific and thought-provoking)
-- Use Socratic method to encourage critical thinking
-- Return JSON: {{"target_text": str, "target_author": str, "clarifying_questions": [str], "confidence": float}}
-
-CRITICAL - TARGET_TEXT REQUIREMENTS:
-- The "target_text" MUST be copied EXACTLY character-for-character from the contributions above
-- Do NOT paraphrase, rephrase, summarize, or modify the text in ANY way
-- Copy-paste the text VERBATIM - it must match the original word-for-word
-- If you cannot find exact text to copy, return empty string "" for target_text
-- Questions must be concise (1-2 questions maximum), specific and actionable"""
-
-    def _format_contributions(self, document: Dict) -> str:
-        """Format contributions for prompt"""
-        lines = []
-        for contrib in document.get("contributions", []):
-            author = contrib.get('author', 'Anonymous')
-            text = contrib.get('text', '')
-            lines.append(f"{author}: {text}")
-        return "\n".join(lines)
 
 
 class GeminiLLMService:
