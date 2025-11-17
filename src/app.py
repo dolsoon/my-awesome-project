@@ -170,7 +170,8 @@ class AIFacilitatorApp:
         """Interactive menu for approval decision using arrow keys"""
         choices = [
             questionary.Choice(title="✅ Approve - Post this comment", value='y'),
-            questionary.Choice(title="✏️  Edit - Modify comment before posting", value='e'),
+            questionary.Choice(title="✏️  Edit - Modify comment manually", value='e'),
+            questionary.Choice(title="🔄 Refine - Ask LLM to modify", value='r'),
             questionary.Choice(title="❌ Reject - Skip this comment", value='n'),
         ]
 
@@ -183,26 +184,58 @@ class AIFacilitatorApp:
         return result if result else 'n'
 
     def _get_command_selection(self) -> str:
-        """Interactive menu for command selection"""
-        choices = [
-            questionary.Choice(title="📊 analyze - Analyze current documents", value='analyze'),
-            questionary.Choice(title="📝 watch - Watch a new document (enter URL)", value='watch'),
-            questionary.Choice(title="📋 list - List watched documents", value='list'),
-            questionary.Choice(title="🎯 mode - Change analysis mode", value='mode'),
-            questionary.Choice(title="⏱️  schedule - Configure automatic mode", value='schedule'),
-            questionary.Choice(title="📈 stats - View statistics", value='stats'),
-            questionary.Choice(title="💾 export - Export decisions", value='export'),
-            questionary.Choice(title="❓ help - Show help", value='help'),
-            questionary.Choice(title="🚪 exit - Quit application", value='exit'),
-        ]
+        """Interactive menu for command selection (context-aware)"""
+        # Check if any documents are being watched
+        has_documents = len(self.document_monitor.watched_documents) > 0
+
+        if has_documents:
+            # Documents exist - show Analyze at top
+            choices = [
+                questionary.Choice(title="📊 analyze - Analyze documents (choose mode)", value='analyze'),
+                questionary.Choice(title="📝 watch - Watch a new document", value='watch'),
+                questionary.Choice(title="📋 list - List watched documents", value='list'),
+                questionary.Choice(title="⏱️  schedule - Configure automatic mode", value='schedule'),
+                questionary.Choice(title="📈 stats - View statistics", value='stats'),
+                questionary.Choice(title="💾 export - Export decisions", value='export'),
+                questionary.Choice(title="❓ help - Show help", value='help'),
+                questionary.Choice(title="🚪 exit - Quit application", value='exit'),
+            ]
+        else:
+            # No documents - show Watch at top
+            choices = [
+                questionary.Choice(title="📝 watch - Watch a new document (start here!)", value='watch'),
+                questionary.Choice(title="📋 list - List watched documents", value='list'),
+                questionary.Choice(title="❓ help - Show help", value='help'),
+                questionary.Choice(title="🚪 exit - Quit application", value='exit'),
+            ]
 
         result = questionary.select(
-            f"[{self.current_mode.upper()}] Select command:",
+            f"[{self.current_mode.upper()}] Main Menu:",
             choices=choices,
             use_arrow_keys=True
         ).ask()
 
         return result if result else 'exit'
+
+    def _get_analyze_menu(self) -> str:
+        """Interactive menu for analysis mode selection"""
+        modes = ["outlier", "summary", "connect", "question"]
+        choices = [
+            questionary.Choice(
+                title=f"{'✅' if mode == self.current_mode else '  '} {mode.capitalize()} mode",
+                value=mode
+            )
+            for mode in modes
+        ]
+        choices.append(questionary.Choice(title="🔙 Back to main menu", value='back'))
+
+        result = questionary.select(
+            "Select analysis mode:",
+            choices=choices,
+            use_arrow_keys=True
+        ).ask()
+
+        return result if result else 'back'
 
     def _get_mode_selection(self) -> str:
         """Interactive menu for mode selection"""
@@ -446,19 +479,12 @@ class AIFacilitatorApp:
                     )
 
                 elif decision_input == 'e':
-                    # Edit comment
+                    # Edit comment with pre-filled text
                     print()
-                    print("Enter edited comment (press Ctrl+D or Ctrl+Z when done):")
-                    print("─" * 70)
-                    lines = []
-                    try:
-                        while True:
-                            line = input()
-                            lines.append(line)
-                    except EOFError:
-                        pass
-
-                    edited_text = "\n".join(lines)
+                    edited_text = questionary.text(
+                        "Edit comment:",
+                        default=suggestion["comment_text"]
+                    ).ask()
 
                     if edited_text.strip():
                         # Extract target text from LLM result (if available)
@@ -497,6 +523,142 @@ class AIFacilitatorApp:
                     else:
                         print()
                         print("❌ Empty comment, not posted")
+
+                elif decision_input == 'r':
+                    # Refine comment with LLM (chat-like iterative improvement)
+                    print()
+                    instruction = questionary.text(
+                        "How should I modify the comment? (e.g., 'make it shorter', 'more encouraging'):"
+                    ).ask()
+
+                    if instruction and instruction.strip():
+                        print()
+                        print(f"🔄 Refining comment: \"{instruction}\"...")
+
+                        # Regenerate original mode-specific prompt with full document context
+                        template = self.llm_service.templates[mode]
+                        original_prompt = template.generate(document)
+
+                        # Append conversation history for iterative refinement
+                        refinement_prompt = f"""{original_prompt}
+
+=== REFINEMENT REQUEST ===
+Previous attempt: "{suggestion["comment_text"]}"
+User feedback: {instruction}
+
+Please refine the response according to the user's feedback while:
+1. Maintaining all original requirements from the instructions above
+2. Preserving relevance to the contributions and context
+3. Applying the user's specific modification request
+
+Return the same JSON structure as before with the refined content."""
+
+                        # Call LLM for refinement (using Gemini directly)
+                        try:
+                            from google.generativeai import GenerativeModel
+                            import google.generativeai as genai
+
+                            genai.configure(api_key=self.llm_service.api_key)
+                            model = GenerativeModel(self.llm_service.model)
+
+                            response = model.generate_content(
+                                refinement_prompt,
+                                generation_config=genai.types.GenerationConfig(
+                                    temperature=0.7,
+                                    max_output_tokens=1000,
+                                )
+                            )
+
+                            # Parse refinement result
+                            refined = self.llm_service._parse_structured_response(response.text)
+
+                            if refined and refined.get("refined_comment"):
+                                # Update suggestion with refined comment
+                                suggestion["comment_text"] = refined["refined_comment"]
+
+                                # Show refined comment
+                                print()
+                                print("=" * 70)
+                                print("🔄 Refined Comment:")
+                                print("─" * 70)
+                                print(suggestion["comment_text"])
+                                print("─" * 70)
+                                print()
+
+                                # Loop back to approval decision with refined comment
+                                # (recursive call to handle the refined suggestion)
+                                decision_input = self._get_approval_decision()
+
+                                # Handle the new decision (approve/edit/refine again/reject)
+                                if decision_input == 'y':
+                                    # Approve refined comment (same logic as above)
+                                    target_text = result.get("target_text")
+                                    if target_text:
+                                        self.comment_poster.current_document_text = text
+                                        self.comment_poster.current_document_structure = doc_content
+
+                                    comment_dict = {
+                                        "document_id": doc_id,
+                                        "comment_text": suggestion["comment_text"],
+                                        "text_position": target_text,
+                                        "mode": mode,
+                                        "confidence": refined.get("confidence", 0)
+                                    }
+                                    post_result = self.comment_poster.post_comment(comment_dict)
+
+                                    if post_result.get("success"):
+                                        print("✅ Refined comment posted successfully")
+                                        print(f"   Comment ID: {post_result.get('comment_id')}")
+                                    else:
+                                        error_msg = post_result.get('message') or post_result.get('error') or 'Unknown error'
+                                        print(f"⚠️  Comment posting failed: {error_msg}")
+
+                                    self.approval_workflow.process_decision(
+                                        suggestion=suggestion,
+                                        decision_type="refine_approve",
+                                        researcher_id="researcher"
+                                    )
+
+                                elif decision_input == 'e':
+                                    # Edit refined comment
+                                    edited_text = questionary.text(
+                                        "Edit comment:",
+                                        default=suggestion["comment_text"]
+                                    ).ask()
+
+                                    if edited_text and edited_text.strip():
+                                        target_text = result.get("target_text")
+                                        if target_text:
+                                            self.comment_poster.current_document_text = text
+                                            self.comment_poster.current_document_structure = doc_content
+
+                                        comment_dict = {
+                                            "document_id": doc_id,
+                                            "comment_text": edited_text,
+                                            "text_position": target_text,
+                                            "mode": mode,
+                                            "confidence": refined.get("confidence", 0)
+                                        }
+                                        post_result = self.comment_poster.post_comment(comment_dict)
+
+                                        if post_result.get("success"):
+                                            print("✅ Edited comment posted successfully")
+                                            print(f"   Comment ID: {post_result.get('comment_id')}")
+                                        else:
+                                            error_msg = post_result.get('message') or post_result.get('error') or 'Unknown error'
+                                            print(f"⚠️  Comment posting failed: {error_msg}")
+
+                                else:
+                                    print("❌ Refined comment rejected")
+
+                            else:
+                                print("⚠️  Failed to refine comment, using original")
+
+                        except Exception as e:
+                            print(f"❌ Refinement error: {e}")
+                            print("   Using original comment")
+                    else:
+                        print("❌ No instruction provided, keeping original comment")
 
                 else:
                     print("❌ Comment rejected")
@@ -609,15 +771,41 @@ class AIFacilitatorApp:
                 elif cmd == "list":
                     self.list_documents()
 
-                elif cmd == "mode":
-                    # Interactive mode selection
-                    new_mode = self._get_mode_selection()
-                    if new_mode:
-                        self.current_mode = new_mode
-                        print(f"✅ Switched to {self.current_mode} mode")
-
                 elif cmd == "analyze":
-                    self.perform_analysis(self.current_mode)
+                    # Show analyze submenu with mode selection
+                    while True:
+                        mode_choice = self._get_analyze_menu()
+
+                        if mode_choice == 'back':
+                            break
+
+                        # Update current mode
+                        self.current_mode = mode_choice
+                        print(f"\n✅ Selected {self.current_mode} mode")
+
+                        # Perform analysis
+                        self.perform_analysis(self.current_mode)
+
+                        # After analysis, show post-analysis menu
+                        post_analysis_choice = questionary.select(
+                            "What would you like to do next?",
+                            choices=[
+                                questionary.Choice(title="🔄 Analyze again (same mode)", value='again'),
+                                questionary.Choice(title="🎯 Change mode and analyze", value='change'),
+                                questionary.Choice(title="🔙 Back to main menu", value='back'),
+                            ],
+                            use_arrow_keys=True
+                        ).ask()
+
+                        if post_analysis_choice == 'again':
+                            # Analyze again with same mode
+                            self.perform_analysis(self.current_mode)
+                        elif post_analysis_choice == 'change':
+                            # Loop back to mode selection
+                            continue
+                        else:
+                            # Back to main menu
+                            break
 
                 elif cmd == "schedule":
                     # Interactive schedule configuration
