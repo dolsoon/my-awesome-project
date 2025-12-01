@@ -1,7 +1,7 @@
 {
   "branch": "feature/SPEC-AI-FACIL-001",
-  "last_commit": "6ccbafc fix(llm): improve JSON parsing to handle extra text in responses",
-  "commit_time": "37 minutes ago",
-  "changes": 1,
-  "last_check": "2025-11-16T12:08:34.568629"
+  "last_commit": "0142413 refactor(prompts): separate prompts into individual files for easy management",
+  "commit_time": "2 weeks ago",
+  "changes": 0,
+  "last_check": "2025-12-02T01:18:26.221933"
 }

@@ -391,23 +391,13 @@ class AIFacilitatorApp:
 
             # Get context files
             context_files = self.context_manager.list_files()
+            context_content = self.context_manager.get_concatenated_context() if context_files else ""
 
-            # Build document structure for LLM
+            # Build simple document structure for LLM (raw text, no conversion needed)
             document = {
                 "document_id": doc_id,
-                "contributions": [
-                    {
-                        "author": "Collaborative Document",
-                        "text": text,
-                        "timestamp": time.time()
-                    }
-                ],
-                "context_files": [
-                    {
-                        "filename": ctx_file,
-                        "content": self.context_manager.get_concatenated_context()
-                    }
-                ] if context_files else []
+                "text": text,  # Raw document text
+                "context": context_content  # Raw context text
             }
 
             # Perform LLM analysis

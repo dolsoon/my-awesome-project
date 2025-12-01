@@ -15,22 +15,11 @@ class PromptTemplate(ABC):
         """Generate prompt for specific mode"""
         pass
 
-    def _format_contributions(self, document: Dict) -> str:
-        """Format contributions for prompt"""
-        lines = []
-        for contrib in document.get("contributions", []):
-            author = contrib.get('author', 'Anonymous')
-            text = contrib.get('text', '')
-            lines.append(f"{author}: {text}")
-        return "\n".join(lines)
+    def _get_full_context(self, document: Dict) -> str:
+        """Get document text with optional context prepended"""
+        text = document.get("text", "")
+        context = document.get("context", "")
 
-    def _format_context_files(self, document: Dict) -> str:
-        """Format context files for prompt"""
-        if not document.get("context_files"):
-            return ""
-        lines = ["CONTEXT FILES:"]
-        for ctx_file in document.get("context_files", []):
-            filename = ctx_file.get("filename", "unknown")
-            content = ctx_file.get("content", "")
-            lines.append(f"[{filename}] {content}")
-        return "\n".join(lines)
+        if context:
+            return f"CONTEXT:\n{context}\n\nDOCUMENT:\n{text}"
+        return text
