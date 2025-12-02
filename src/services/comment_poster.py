@@ -110,39 +110,32 @@ class CommentPoster:
         print(f"   ❌ No match found")
         return None
 
-    def _find_paragraph_end(self, start_index: int) -> int:
-        """Find the end of paragraph (next newline) after start_index"""
+    def _find_paragraph_end(self, target_index: int) -> int:
+        """Find the end of the paragraph CONTAINING target_index"""
         if not self.current_document_structure:
-            return start_index
+            return target_index
 
         body = self.current_document_structure.get("body", {})
         content = body.get("content", [])
 
-        # Walk through structural elements to find newline after start_index
+        # Find the paragraph that contains our target index
         for element in content:
             if "paragraph" not in element:
                 continue
 
-            paragraph = element["paragraph"]
-            elements = paragraph.get("elements", [])
+            # Get paragraph boundaries
+            para_start = element.get("startIndex", 0)
+            para_end = element.get("endIndex", 0)
 
-            for text_element in elements:
-                if "textRun" not in text_element:
-                    continue
+            # Check if target_index falls within this paragraph
+            if para_start <= target_index < para_end:
+                print(f"   📍 Found containing paragraph: [{para_start}-{para_end}]")
+                # Return the end of this paragraph (after its newline)
+                return para_end
 
-                text_run = text_element["textRun"]
-                content_text = text_run.get("content", "")
-                elem_start = text_element.get("startIndex")
-                elem_end = text_element.get("endIndex")
-
-                # If this element is after our start_index and contains newline
-                if elem_start >= start_index and "\n" in content_text:
-                    # Find first newline position
-                    newline_offset = content_text.find("\n")
-                    return elem_start + newline_offset + 1  # After the newline
-
-        # If no newline found, return original position
-        return start_index
+        # Fallback: return original position
+        print(f"   ⚠️  No containing paragraph found for index {target_index}")
+        return target_index
 
     def _find_in_structure(self, target_text: str) -> Optional[Dict]:
         """Search for target text in document structure (accurate indices)"""
@@ -208,12 +201,14 @@ class CommentPoster:
 
         # Determine insertion position
         if position and isinstance(position, dict):
-            # Find the end of the paragraph containing the target text
-            target_end_index = position["index"] + position["length"]
+            # Target text location
+            target_start = position["index"]
+            target_end = position["index"] + position["length"]
+            print(f"   📍 Target text spans: [{target_start}-{target_end}]")
 
-            # Find next paragraph break (newline) after target text
-            insert_index = self._find_paragraph_end(target_end_index)
-            print(f"   📍 Inserting after paragraph at index {insert_index}")
+            # Find the end of the paragraph containing the target text
+            insert_index = self._find_paragraph_end(target_start)
+            print(f"   📍 Inserting at paragraph end: index {insert_index}")
         else:
             # Fallback: Insert at top when position not found
             insert_index = 1

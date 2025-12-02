@@ -262,18 +262,35 @@ class GeminiLLMService:
             response_text = api_response.get("response", "")
             parsed = self._parse_structured_response(response_text)
 
+            # DEBUG: Show parsed result
+            print(f"   🔍 DEBUG: Parsed LLM response keys: {list(parsed.keys()) if parsed else 'None'}")
+
             if parsed is None:
                 logger.warning("Failed to parse structured response")
+                print(f"   ❌ DEBUG: Failed to parse response: {response_text[:200]}...")
                 return None
 
-            # Check confidence threshold
-            confidence = parsed.get("confidence", 0)
-            if confidence >= self.confidence_threshold:
-                logger.info(f"Analysis successful with confidence: {confidence}")
-                return parsed
+            # Validate response based on mode
+            if mode == "outlier":
+                # Outlier mode uses outlier_percentile instead of confidence
+                percentile = parsed.get("outlier_percentile", 0)
+                print(f"   🔍 DEBUG: outlier_percentile = {percentile}")
+                if 0 < percentile <= 0.5:  # Valid percentile range (top 1% to top 50%)
+                    logger.info(f"Analysis successful with outlier_percentile: {percentile}")
+                    return parsed
+                else:
+                    logger.warning(f"Invalid outlier_percentile: {percentile}")
+                    print(f"   ❌ DEBUG: Invalid percentile {percentile} (expected 0 < x <= 0.5)")
+                    return None
             else:
-                logger.info(f"Confidence {confidence} below threshold {self.confidence_threshold}")
-                return None
+                # Other modes use confidence threshold
+                confidence = parsed.get("confidence", 0)
+                if confidence >= self.confidence_threshold:
+                    logger.info(f"Analysis successful with confidence: {confidence}")
+                    return parsed
+                else:
+                    logger.info(f"Confidence {confidence} below threshold {self.confidence_threshold}")
+                    return None
 
         except TimeoutError as e:
             logger.error(f"Analysis timeout: {str(e)}")

@@ -21,6 +21,8 @@ from src.services.gemini_llm_service import GeminiLLMService
 from src.services.context_manager import ContextFileManager
 from src.services.approval_workflow import ApprovalWorkflow
 from src.services.comment_poster import CommentPoster
+from src.services.analysis_presets import ANALYSIS_CONTEXT_PRESETS
+from src.services.document_analyzer import DocumentAnalyzer
 from src.ui.terminal_interface import TerminalUI
 
 
@@ -69,6 +71,9 @@ class AIFacilitatorApp:
         self.docs_client = None
         self.drive_client = None
         self.current_mode = "outlier"
+
+        # Analysis context - situational framing for LLM
+        self.analysis_context = None  # Persists between analysis runs
 
     def _check_environment(self):
         """Check if required environment variables are set"""
@@ -166,93 +171,6 @@ class AIFacilitatorApp:
             print(f"❌ Authentication failed: {e}")
             sys.exit(1)
 
-    def _get_approval_decision(self) -> str:
-        """Interactive menu for approval decision using arrow keys"""
-        choices = [
-            questionary.Choice(title="✅ Approve - Post this comment", value='y'),
-            questionary.Choice(title="✏️  Edit - Modify comment manually", value='e'),
-            questionary.Choice(title="🔄 Refine - Ask LLM to modify", value='r'),
-            questionary.Choice(title="❌ Reject - Skip this comment", value='n'),
-        ]
-
-        result = questionary.select(
-            "Post this comment?",
-            choices=choices,
-            use_arrow_keys=True
-        ).ask()
-
-        return result if result else 'n'
-
-    def _get_command_selection(self) -> str:
-        """Interactive menu for command selection (context-aware)"""
-        # Check if any documents are being watched
-        has_documents = len(self.document_monitor.watched_documents) > 0
-
-        if has_documents:
-            # Documents exist - show Analyze at top
-            choices = [
-                questionary.Choice(title="📊 analyze - Analyze documents (choose mode)", value='analyze'),
-                questionary.Choice(title="📝 watch - Watch a new document", value='watch'),
-                questionary.Choice(title="📋 list - List watched documents", value='list'),
-                questionary.Choice(title="⏱️  schedule - Configure automatic mode", value='schedule'),
-                questionary.Choice(title="📈 stats - View statistics", value='stats'),
-                questionary.Choice(title="💾 export - Export decisions", value='export'),
-                questionary.Choice(title="❓ help - Show help", value='help'),
-                questionary.Choice(title="🚪 exit - Quit application", value='exit'),
-            ]
-        else:
-            # No documents - show Watch at top
-            choices = [
-                questionary.Choice(title="📝 watch - Watch a new document (start here!)", value='watch'),
-                questionary.Choice(title="📋 list - List watched documents", value='list'),
-                questionary.Choice(title="❓ help - Show help", value='help'),
-                questionary.Choice(title="🚪 exit - Quit application", value='exit'),
-            ]
-
-        result = questionary.select(
-            f"[{self.current_mode.upper()}] Main Menu:",
-            choices=choices,
-            use_arrow_keys=True
-        ).ask()
-
-        return result if result else 'exit'
-
-    def _get_analyze_menu(self) -> str:
-        """Interactive menu for analysis mode selection"""
-        modes = ["outlier", "summary", "connect", "question"]
-        choices = [
-            questionary.Choice(
-                title=f"{'✅' if mode == self.current_mode else '  '} {mode.capitalize()} mode",
-                value=mode
-            )
-            for mode in modes
-        ]
-        choices.append(questionary.Choice(title="🔙 Back to main menu", value='back'))
-
-        result = questionary.select(
-            "Select analysis mode:",
-            choices=choices,
-            use_arrow_keys=True
-        ).ask()
-
-        return result if result else 'back'
-
-    def _get_mode_selection(self) -> str:
-        """Interactive menu for mode selection"""
-        modes = ["outlier", "summary", "connect", "question"]
-        choices = [
-            questionary.Choice(title=f"{'✅' if mode == self.current_mode else '  '} {mode.capitalize()} mode", value=mode)
-            for mode in modes
-        ]
-
-        result = questionary.select(
-            "Select analysis mode:",
-            choices=choices,
-            use_arrow_keys=True
-        ).ask()
-
-        return result if result else self.current_mode
-
     def _refresh_credentials_if_needed(self):
         """Refresh OAuth credentials if expired"""
         if self.oauth_handler.is_token_expired():
@@ -303,6 +221,23 @@ class AIFacilitatorApp:
             # Initialize scheduler with analysis service
             self.scheduler = DualModeScheduler(
                 analysis_service=self._create_analysis_service()
+            )
+
+            # Initialize terminal UI
+            self.terminal_ui = TerminalUI(
+                scheduler=self.scheduler,
+                context_manager=self.context_manager,
+                analysis_service=self._create_analysis_service()
+            )
+
+            # Initialize document analyzer
+            self.document_analyzer = DocumentAnalyzer(
+                llm_service=self.llm_service,
+                context_manager=self.context_manager,
+                comment_poster=self.comment_poster,
+                approval_workflow=self.approval_workflow,
+                document_monitor=self.document_monitor,
+                terminal_ui=self.terminal_ui
             )
 
         except Exception as e:
@@ -376,328 +311,11 @@ class AIFacilitatorApp:
         print(f"🔍 Analyzing {len(docs)} document(s) in {analysis_mode} mode...")
         print()
 
+        # Sync analysis context to document analyzer
+        self.document_analyzer.analysis_context = self.analysis_context
+
         for doc_id in docs:
-            self._analyze_document(doc_id, analysis_mode)
-
-    def _analyze_document(self, doc_id: str, mode: str):
-        """Analyze a single document"""
-        try:
-            # Fetch document content
-            print(f"📄 Fetching document: {doc_id}")
-            doc_content = self.document_monitor.fetch_document_content(doc_id)
-
-            # Extract text
-            text = self.document_monitor.extract_text_from_document(doc_id)
-
-            # Get context files
-            context_files = self.context_manager.list_files()
-            context_content = self.context_manager.get_concatenated_context() if context_files else ""
-
-            # Build simple document structure for LLM (raw text, no conversion needed)
-            document = {
-                "document_id": doc_id,
-                "text": text,  # Raw document text
-                "context": context_content  # Raw context text
-            }
-
-            # Perform LLM analysis
-            print(f"🤖 Running {mode} analysis...")
-            result = self.llm_service.analyze(document, mode)
-
-            if result:
-                print(f"✅ Analysis complete")
-                print(f"   Confidence: {result.get('confidence', 0):.2f}")
-
-                # DEBUG: Show what LLM returned
-                print(f"\n🔍 DEBUG - LLM Response:")
-                print(f"   Target text: {result.get('target_text', 'None')}")
-                print(f"   Full result keys: {list(result.keys())}")
-
-                # Generate comment suggestion
-                suggestion = self._generate_comment_suggestion(result, mode)
-
-                # Display suggestion to researcher
-                print()
-                print("=" * 70)
-                print("📊 Suggested Comment:")
-                print("─" * 70)
-
-                # Show context if available
-                target_text = result.get("target_text")
-                if target_text:
-                    print(f"📍 Regarding: \"{target_text}\"")
-                    print()
-
-                print(suggestion["comment_text"])
-                print("─" * 70)
-                print()
-
-                # Get researcher decision (interactive menu)
-                decision_input = self._get_approval_decision()
-
-                if decision_input == 'y':
-                    # Extract target text from LLM result (if available)
-                    target_text = result.get("target_text")
-
-                    # Set document content for position finding (use structure for accurate indices)
-                    if target_text:
-                        self.comment_poster.current_document_text = text
-                        self.comment_poster.current_document_structure = doc_content
-
-                    # Post comment
-                    comment_dict = {
-                        "document_id": doc_id,
-                        "comment_text": suggestion["comment_text"],
-                        "text_position": target_text,  # LLM-identified text to highlight
-                        "mode": mode,
-                        "confidence": result.get("confidence", 0)
-                    }
-                    result = self.comment_poster.post_comment(comment_dict)
-
-                    if result.get("success"):
-                        print("✅ Comment posted successfully")
-                        print(f"   Comment ID: {result.get('comment_id')}")
-                    else:
-                        error_msg = result.get('message') or result.get('error') or 'Unknown error'
-                        print(f"⚠️  Comment posting failed: {error_msg}")
-
-                    # Log decision
-                    self.approval_workflow.process_decision(
-                        suggestion=suggestion,
-                        decision_type="approve",
-                        researcher_id="researcher"
-                    )
-
-                elif decision_input == 'e':
-                    # Edit comment with pre-filled text
-                    print()
-                    edited_text = questionary.text(
-                        "Edit comment:",
-                        default=suggestion["comment_text"]
-                    ).ask()
-
-                    if edited_text.strip():
-                        # Extract target text from LLM result (if available)
-                        target_text = result.get("target_text")
-
-                        # Set document content for position finding (use structure for accurate indices)
-                        if target_text:
-                            self.comment_poster.current_document_text = text
-                            self.comment_poster.current_document_structure = doc_content
-
-                        # Post edited comment
-                        comment_dict = {
-                            "document_id": doc_id,
-                            "comment_text": edited_text,
-                            "text_position": target_text,  # LLM-identified text to highlight
-                            "mode": mode,
-                            "confidence": result.get("confidence", 0)
-                        }
-                        post_result = self.comment_poster.post_comment(comment_dict)
-
-                        print()
-                        if post_result.get("success"):
-                            print("✅ Edited comment posted successfully")
-                            print(f"   Comment ID: {post_result.get('comment_id')}")
-                        else:
-                            error_msg = post_result.get('message') or post_result.get('error') or 'Unknown error'
-                            print(f"⚠️  Comment posting failed: {error_msg}")
-
-                        # Log decision
-                        self.approval_workflow.process_decision(
-                            suggestion=suggestion,
-                            decision_type="edit",
-                            edited_text=edited_text,
-                            researcher_id="researcher"
-                        )
-                    else:
-                        print()
-                        print("❌ Empty comment, not posted")
-
-                elif decision_input == 'r':
-                    # Refine comment with LLM (chat-like iterative improvement)
-                    print()
-                    instruction = questionary.text(
-                        "How should I modify the comment? (e.g., 'make it shorter', 'more encouraging'):"
-                    ).ask()
-
-                    if instruction and instruction.strip():
-                        print()
-                        print(f"🔄 Refining comment: \"{instruction}\"...")
-
-                        # Regenerate original mode-specific prompt with full document context
-                        template = self.llm_service.templates[mode]
-                        original_prompt = template.generate(document)
-
-                        # Append conversation history for iterative refinement
-                        refinement_prompt = f"""{original_prompt}
-
-=== REFINEMENT REQUEST ===
-Previous attempt: "{suggestion["comment_text"]}"
-User feedback: {instruction}
-
-Please refine the response according to the user's feedback while:
-1. Maintaining all original requirements from the instructions above
-2. Preserving relevance to the contributions and context
-3. Applying the user's specific modification request
-
-Return the same JSON structure as before with the refined content."""
-
-                        # Call LLM for refinement (using Gemini directly)
-                        try:
-                            from google.generativeai import GenerativeModel
-                            import google.generativeai as genai
-
-                            genai.configure(api_key=self.llm_service.api_key)
-                            model = GenerativeModel(self.llm_service.model)
-
-                            response = model.generate_content(
-                                refinement_prompt,
-                                generation_config=genai.types.GenerationConfig(
-                                    temperature=0.7,
-                                    max_output_tokens=1000,
-                                )
-                            )
-
-                            # Parse refinement result
-                            refined = self.llm_service._parse_structured_response(response.text)
-
-                            if refined and refined.get("refined_comment"):
-                                # Update suggestion with refined comment
-                                suggestion["comment_text"] = refined["refined_comment"]
-
-                                # Show refined comment
-                                print()
-                                print("=" * 70)
-                                print("🔄 Refined Comment:")
-                                print("─" * 70)
-                                print(suggestion["comment_text"])
-                                print("─" * 70)
-                                print()
-
-                                # Loop back to approval decision with refined comment
-                                # (recursive call to handle the refined suggestion)
-                                decision_input = self._get_approval_decision()
-
-                                # Handle the new decision (approve/edit/refine again/reject)
-                                if decision_input == 'y':
-                                    # Approve refined comment (same logic as above)
-                                    target_text = result.get("target_text")
-                                    if target_text:
-                                        self.comment_poster.current_document_text = text
-                                        self.comment_poster.current_document_structure = doc_content
-
-                                    comment_dict = {
-                                        "document_id": doc_id,
-                                        "comment_text": suggestion["comment_text"],
-                                        "text_position": target_text,
-                                        "mode": mode,
-                                        "confidence": refined.get("confidence", 0)
-                                    }
-                                    post_result = self.comment_poster.post_comment(comment_dict)
-
-                                    if post_result.get("success"):
-                                        print("✅ Refined comment posted successfully")
-                                        print(f"   Comment ID: {post_result.get('comment_id')}")
-                                    else:
-                                        error_msg = post_result.get('message') or post_result.get('error') or 'Unknown error'
-                                        print(f"⚠️  Comment posting failed: {error_msg}")
-
-                                    self.approval_workflow.process_decision(
-                                        suggestion=suggestion,
-                                        decision_type="refine_approve",
-                                        researcher_id="researcher"
-                                    )
-
-                                elif decision_input == 'e':
-                                    # Edit refined comment
-                                    edited_text = questionary.text(
-                                        "Edit comment:",
-                                        default=suggestion["comment_text"]
-                                    ).ask()
-
-                                    if edited_text and edited_text.strip():
-                                        target_text = result.get("target_text")
-                                        if target_text:
-                                            self.comment_poster.current_document_text = text
-                                            self.comment_poster.current_document_structure = doc_content
-
-                                        comment_dict = {
-                                            "document_id": doc_id,
-                                            "comment_text": edited_text,
-                                            "text_position": target_text,
-                                            "mode": mode,
-                                            "confidence": refined.get("confidence", 0)
-                                        }
-                                        post_result = self.comment_poster.post_comment(comment_dict)
-
-                                        if post_result.get("success"):
-                                            print("✅ Edited comment posted successfully")
-                                            print(f"   Comment ID: {post_result.get('comment_id')}")
-                                        else:
-                                            error_msg = post_result.get('message') or post_result.get('error') or 'Unknown error'
-                                            print(f"⚠️  Comment posting failed: {error_msg}")
-
-                                else:
-                                    print("❌ Refined comment rejected")
-
-                            else:
-                                print("⚠️  Failed to refine comment, using original")
-
-                        except Exception as e:
-                            print(f"❌ Refinement error: {e}")
-                            print("   Using original comment")
-                    else:
-                        print("❌ No instruction provided, keeping original comment")
-
-                else:
-                    print("❌ Comment rejected")
-
-                    # Log decision
-                    self.approval_workflow.process_decision(
-                        suggestion=suggestion,
-                        decision_type="reject",
-                        researcher_id="researcher"
-                    )
-
-            else:
-                print("⚠️  Analysis produced no results")
-
-        except Exception as e:
-            print(f"❌ Error analyzing document: {e}")
-
-    def _generate_comment_suggestion(self, analysis_result: Dict, mode: str) -> Dict:
-        """Generate concise comment suggestion from analysis result"""
-        if mode == "outlier":
-            # Use the LLM's concise encouragement message directly
-            comment_text = analysis_result.get('encouragement_message', 'Great work!')
-
-        elif mode == "summary":
-            # Use the LLM's concise summary directly
-            comment_text = analysis_result.get('summary', 'No summary available')
-
-        elif mode == "connect":
-            connections = analysis_result.get('connections', [])
-            if connections:
-                conn = connections[0]
-                # Use the LLM's concise connection message directly
-                comment_text = conn.get('connection_message', 'Consider collaborating!')
-            else:
-                comment_text = "No connections found at this time."
-
-        elif mode == "question":
-            questions = analysis_result.get('clarifying_questions', [])
-            # Format questions concisely
-            comment_text = " ".join(questions) if questions else "No questions at this time."
-        else:
-            comment_text = "Analysis complete."
-
-        return {
-            "comment_text": comment_text,
-            "mode": mode,
-            "confidence": analysis_result.get("confidence", 0),
-            "analysis_result": analysis_result
-        }
+            self.document_analyzer.analyze_document(doc_id, analysis_mode)
 
     def extract_doc_id(self, url_or_id: str) -> Optional[str]:
         """Extract Google Docs document ID from URL or return ID directly"""
@@ -721,7 +339,31 @@ Return the same JSON structure as before with the refined content."""
         if not self.authenticated:
             self.authenticate()
 
-        # Print header
+        self._print_startup_banner()
+
+        # Main loop
+        while True:
+            try:
+                print()
+                has_documents = len(self.document_monitor.watched_documents) > 0
+                cmd = self.terminal_ui.get_command_selection(has_documents, self.current_mode)
+
+                if not cmd:
+                    continue
+
+                # Delegate command handling to terminal_ui
+                if self.terminal_ui.handle_cli_command(cmd, self):
+                    sys.exit(0)
+
+            except KeyboardInterrupt:
+                print("\n\n👋 Interrupted. Type 'exit' to quit or continue using commands.\n")
+
+            except EOFError:
+                print("\n\n👋 Goodbye!\n")
+                sys.exit(0)
+
+    def _print_startup_banner(self):
+        """Print startup banner with status information"""
         print()
         print("=" * 70)
         print("  AI Facilitator Agent - Production CLI")
@@ -730,147 +372,11 @@ Return the same JSON structure as before with the refined content."""
         print("✅ Authenticated with Google Workspace")
         print(f"✅ LLM Service: {self.llm_service.model}")
         print(f"✅ Current Mode: {self.current_mode}")
+        context_status = "Set" if self.analysis_context else "Not set (use 'context' to configure)"
+        print(f"📝 Analysis Context: {context_status}")
         print()
         print("Use arrow keys to select commands. Press Ctrl+C to cancel selection.")
         print()
-
-        # Main loop
-        while True:
-            try:
-                # Get command from interactive menu
-                print()
-                cmd = self._get_command_selection()
-
-                if not cmd:
-                    continue
-
-                # Handle commands
-                if cmd == "help":
-                    self.print_help()
-
-                elif cmd == "watch":
-                    # Text input for URL (exception case)
-                    url = questionary.text(
-                        "Enter Google Docs URL:",
-                        validate=lambda text: len(text) > 0 or "URL cannot be empty"
-                    ).ask()
-
-                    if url:
-                        self.watch_document(url)
-
-                elif cmd == "list":
-                    self.list_documents()
-
-                elif cmd == "analyze":
-                    # Show analyze submenu with mode selection
-                    while True:
-                        mode_choice = self._get_analyze_menu()
-
-                        if mode_choice == 'back':
-                            break
-
-                        # Update current mode
-                        self.current_mode = mode_choice
-                        print(f"\n✅ Selected {self.current_mode} mode")
-
-                        # Perform analysis
-                        self.perform_analysis(self.current_mode)
-
-                        # After analysis, show post-analysis menu
-                        post_analysis_choice = questionary.select(
-                            "What would you like to do next?",
-                            choices=[
-                                questionary.Choice(title="🔄 Analyze again (same mode)", value='again'),
-                                questionary.Choice(title="🎯 Change mode and analyze", value='change'),
-                                questionary.Choice(title="🔙 Back to main menu", value='back'),
-                            ],
-                            use_arrow_keys=True
-                        ).ask()
-
-                        if post_analysis_choice == 'again':
-                            # Analyze again with same mode
-                            self.perform_analysis(self.current_mode)
-                        elif post_analysis_choice == 'change':
-                            # Loop back to mode selection
-                            continue
-                        else:
-                            # Back to main menu
-                            break
-
-                elif cmd == "schedule":
-                    # Interactive schedule configuration
-                    schedule_choice = questionary.select(
-                        "Select scheduling mode:",
-                        choices=[
-                            questionary.Choice(title="📊 Manual - Run analysis on demand", value='manual'),
-                            questionary.Choice(title="⏰ Auto 30s - Every 30 seconds", value='30'),
-                            questionary.Choice(title="⏰ Auto 60s - Every 60 seconds", value='60'),
-                            questionary.Choice(title="⏰ Auto 120s - Every 2 minutes", value='120'),
-                        ],
-                        use_arrow_keys=True
-                    ).ask()
-
-                    if schedule_choice == 'manual':
-                        self.scheduler.set_manual_mode()
-                        print("✅ Switched to manual mode")
-                    elif schedule_choice:
-                        interval = int(schedule_choice)
-                        self.scheduler.set_automatic_mode(interval)
-                        print(f"✅ Automatic mode enabled ({interval}s intervals)")
-
-                elif cmd == "stats":
-                    stats = self.approval_workflow.get_session_statistics()
-                    print()
-                    print("📊 Session Statistics:")
-                    print(f"   Total decisions: {stats['total_decisions']}")
-                    print(f"   Approval rate: {stats['approval_rate']:.1%}")
-                    print(f"   Approvals: {stats['approval_count']}")
-                    print(f"   Rejections: {stats['rejection_count']}")
-                    print(f"   Edits: {stats['edit_count']}")
-                    if stats.get('by_mode'):
-                        print()
-                        print("   By mode:")
-                        for mode, rate in stats['by_mode'].items():
-                            print(f"     {mode}: {rate:.1%}")
-
-                elif cmd == "export":
-                    # Interactive export format selection
-                    export_format = questionary.select(
-                        "Select export format:",
-                        choices=[
-                            questionary.Choice(title="📄 CSV - Comma-separated values", value='csv'),
-                            questionary.Choice(title="📋 JSON - JavaScript Object Notation", value='json'),
-                        ],
-                        use_arrow_keys=True
-                    ).ask()
-
-                    if export_format:
-                        filename = f"decisions_{int(time.time())}.{export_format}"
-                        # TODO: Implement actual export logic
-                        print(f"✅ Decisions exported to {filename}")
-
-                elif cmd == "exit":
-                    print()
-                    print("👋 Goodbye! Thanks for using AI Facilitator Agent.")
-                    print()
-                    sys.exit(0)
-
-                else:
-                    print(f"❌ Unknown command: {cmd}")
-                    print("   Type 'help' for available commands")
-
-            except KeyboardInterrupt:
-                print()
-                print()
-                print("👋 Interrupted. Type 'exit' to quit or continue using commands.")
-                print()
-
-            except EOFError:
-                print()
-                print()
-                print("👋 Goodbye!")
-                print()
-                sys.exit(0)
 
     def print_help(self):
         """Print available commands"""
@@ -882,15 +388,15 @@ Return the same JSON structure as before with the refined content."""
         print()
         print("  list                List all watched documents")
         print()
-        print("  mode <type>         Switch agent mode")
+        print("  analyze [mode]      Trigger analysis (optional: specify mode)")
         print("                      Types: outlier, summary, connect, question")
         print()
-        print("  analyze [mode]      Trigger analysis (optional: specify mode)")
+        print("  context             Set analysis context (situational framing)")
+        print("                      Helps LLM understand the situation and target audience")
         print()
         print("  status              Show current status and configuration")
         print()
-        print("  import <file>       Import context file (.txt)")
-        print("  context             List imported context files")
+        print("  import <file>       Import background context file (.txt)")
         print()
         print("  auto <interval>     Enable automatic mode (30, 60, or 120 seconds)")
         print("  manual              Switch to manual mode")

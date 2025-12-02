@@ -16,10 +16,22 @@ class PromptTemplate(ABC):
         pass
 
     def _get_full_context(self, document: Dict) -> str:
-        """Get document text with optional context prepended"""
+        """Get document text with optional context and analysis situation prepended"""
         text = document.get("text", "")
         context = document.get("context", "")
+        analysis_situation = document.get("analysis_situation", "")
 
+        parts = []
+
+        # Add analysis situation first (highest priority framing)
+        if analysis_situation:
+            parts.append(analysis_situation)
+
+        # Add background context (imported files, etc.)
         if context:
-            return f"CONTEXT:\n{context}\n\nDOCUMENT:\n{text}"
-        return text
+            parts.append(f"BACKGROUND CONTEXT:\n{context}")
+
+        # Add the actual document
+        parts.append(f"DOCUMENT:\n{text}")
+
+        return "\n\n".join(parts)

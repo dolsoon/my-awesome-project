@@ -19,14 +19,21 @@ class ApprovalWorkflow:
 
     def format_suggestion_for_display(self, suggestion: Dict[str, Any]) -> str:
         """Format suggestion for researcher display"""
-        mode = suggestion.get("mode", "unknown").upper()
-        confidence = suggestion.get("confidence", 0)
+        mode = suggestion.get("mode", "unknown")
         target_author = suggestion.get("target_author", "Unknown")
         comment_text = suggestion.get("comment_text", "")
         original = suggestion.get("original_suggestion", "")
 
+        # Format mode-specific metric
+        if mode == "outlier":
+            percentile = suggestion.get("outlier_percentile", 0.10)
+            metric_str = f"[RANKING: Top {percentile*100:.0f}%]"
+        else:
+            confidence = suggestion.get("confidence", 0)
+            metric_str = f"[CONFIDENCE: {confidence:.0%}]"
+
         return f"""
-[MODE: {mode}] [CONFIDENCE: {confidence:.0%}]
+[MODE: {mode.upper()}] {metric_str}
 Target Author: {target_author}
 Original Suggestion: {original}
 Proposed Comment: {comment_text}
@@ -44,15 +51,20 @@ Proposed Comment: {comment_text}
         if decision_type not in self.VALID_DECISION_TYPES:
             raise ValueError(f"Invalid decision type: {decision_type}")
 
+        mode = suggestion.get("mode")
         decision = {
             "suggestion_id": suggestion.get("suggestion_id"),
             "decision_type": decision_type,
             "decision_timestamp": datetime.now().isoformat(),
             "researcher_id": researcher_id,
-            "mode": suggestion.get("mode"),
+            "mode": mode,
             "original_suggestion": suggestion.get("original_suggestion"),
-            "confidence": suggestion.get("confidence")
         }
+        # Store mode-specific metric
+        if mode == "outlier":
+            decision["outlier_percentile"] = suggestion.get("outlier_percentile")
+        else:
+            decision["confidence"] = suggestion.get("confidence")
 
         if decision_type == "approve":
             decision["final_comment"] = suggestion.get("comment_text")
